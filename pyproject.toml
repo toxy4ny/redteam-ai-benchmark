@@ -1,0 +1,12 @@
+[project]
+name = "redteam-ai-benchmark"
+version = "1.0.0"
+description = "Evaluate uncensored LLMs for offensive security tasks"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "requests>=2.32.5",
+]
+
+[project.scripts]
+redteam-benchmark = "run_benchmark:main"
