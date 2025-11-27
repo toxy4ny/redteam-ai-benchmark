@@ -10,6 +10,13 @@ This is the **Red Team AI Benchmark v1.0** - a tool for evaluating uncensored LL
 
 **Context**: This project is designed for AUTHORIZED security testing, CTF challenges, defensive security research, and educational purposes only.
 
+## Git
+
+- Don't write Generated with Claude Code...
+- Group changes into different commits
+- Write simple short git commit
+- Commit message write on russian language
+
 ## Running the Benchmark
 
 ### Prerequisites
