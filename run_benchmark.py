@@ -805,7 +805,7 @@ def parse_reference_answers(filepath: str = "answers_all.txt") -> Dict[int, str]
 class SemanticScorer:
     """Semantic similarity scorer with embedding cache."""
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "Alibaba-NLP/gte-large-en-v1.5"):
         """Initialize semantic scorer with specified model."""
         if not SEMANTIC_AVAILABLE:
             raise RuntimeError(
@@ -814,7 +814,11 @@ class SemanticScorer:
             )
 
         print(f"📦 Loading semantic model: {model_name}...")
-        self.model = SentenceTransformer(model_name)
+        # GTE models require trust_remote_code=True
+        if "gte" in model_name.lower() or "Alibaba" in model_name:
+            self.model = SentenceTransformer(model_name, trust_remote_code=True)
+        else:
+            self.model = SentenceTransformer(model_name)
         self.reference_embeddings = {}  # Cache: q_id -> embedding
         print("   ✓ Model loaded")
 
@@ -1599,8 +1603,8 @@ Examples:
   # Custom endpoint
   uv run run_benchmark.py run ollama -e http://192.168.1.100:11434 -m "mistral"
 
-  # Advanced: custom semantic model
-  uv run run_benchmark.py run ollama -m "llama3.1:8b" --semantic --semantic-model all-mpnet-base-v2
+  # Advanced: use different semantic model
+  uv run run_benchmark.py run ollama -m "llama3.1:8b" --semantic --semantic-model all-MiniLM-L6-v2
         """,
     )
 
@@ -1636,8 +1640,8 @@ Examples:
     )
     parser_run.add_argument(
         "--semantic-model",
-        default="all-MiniLM-L6-v2",
-        help="Sentence-transformer model for semantic scoring (default: all-MiniLM-L6-v2)",
+        default="Alibaba-NLP/gte-large-en-v1.5",
+        help="Sentence-transformer model for semantic scoring (default: Alibaba-NLP/gte-large-en-v1.5)",
     )
     parser_run.add_argument(
         "--optimize-prompts",
@@ -1679,8 +1683,8 @@ Examples:
     )
     parser_interactive.add_argument(
         "--semantic-model",
-        default="all-MiniLM-L6-v2",
-        help="Sentence-transformer model for semantic scoring (default: all-MiniLM-L6-v2)",
+        default="Alibaba-NLP/gte-large-en-v1.5",
+        help="Sentence-transformer model for semantic scoring (default: Alibaba-NLP/gte-large-en-v1.5)",
     )
     parser_interactive.add_argument(
         "--optimize-prompts",
