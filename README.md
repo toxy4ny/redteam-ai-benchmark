@@ -528,7 +528,7 @@ MIT — use freely in red team labs, commercial pentests, or AI research.
 
 ### File Structure
 
-```
+```bash
 /redteam-ai-benchmark
   ├── benchmark.json          # Questions (source of truth)
   ├── answers_all.txt         # Ground-truth answers
