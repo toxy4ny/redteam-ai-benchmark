@@ -398,6 +398,114 @@ When optimization is used, you get two files:
 
 ---
 
+## 📊 Langfuse Integration
+
+### What is Langfuse?
+
+[Langfuse](https://langfuse.com/) is an **open-source observability platform** for LLM applications. The benchmark includes optional Langfuse integration for:
+
+- **Distributed tracing**: Track model queries, optimization attempts, and scoring
+- **Performance metrics**: Monitor response times, token usage, and costs
+- **Optimization tracking**: Visualize prompt optimization iterations and success rates
+- **Multi-model comparison**: Analyze performance across different models
+
+![Langfuse Dashboard](langfuse.png)
+
+### Setup
+
+#### 1. Install Langfuse (Docker)
+
+```bash
+# Clone Langfuse repository
+git clone https://github.com/langfuse/langfuse.git
+cd langfuse
+
+# Start with Docker Compose
+docker compose up -d
+
+# Access UI at http://localhost:3000
+```
+
+#### 2. Get API Keys
+
+1. Open Langfuse UI: `http://localhost:3000`
+2. Create a new project
+3. Go to **Settings** → **API Keys**
+4. Create new key pair:
+   - **Public Key**: `pk-lf-...`
+   - **Secret Key**: `sk-lf-...`
+
+#### 3. Configure Benchmark
+
+Create `config.yaml` from `config.example.yaml`:
+
+```yaml
+# Langfuse Observability
+langfuse:
+  secret_key: sk-lf-xxx # Your secret key
+  public_key: pk-lf-xxx # Your public key
+  host: http://localhost:3000 # Langfuse server URL
+```
+
+**Or use environment variables:**
+
+```bash
+export LANGFUSE_SECRET_KEY="sk-lf-xxx"
+export LANGFUSE_PUBLIC_KEY="pk-lf-xxx"
+export LANGFUSE_HOST="http://localhost:3000"
+```
+
+### Running with Langfuse
+
+```bash
+# Run benchmark with Langfuse tracing
+uv run run_benchmark.py run ollama -m "llama3.1:8b" --config config.yaml
+
+# Interactive mode with tracing
+uv run run_benchmark.py interactive ollama --config config.yaml
+
+# With optimization and tracing
+uv run run_benchmark.py run ollama -m "llama3.1:8b" \
+  --optimize-prompts \
+  --optimizer-model "llama3.3:70b" \
+  --config config.yaml
+```
+
+### Trace Structure
+
+Each benchmark run creates a trace with the following structure:
+
+```bash
+benchmark-{model}              # Root trace
+  ├─ generation-Q1             # Question 1
+  │    └─ optimization         # Optimization span (if triggered)
+  │         ├─ iter-1          # Optimization iteration 1
+  │         ├─ iter-2          # Optimization iteration 2
+  │         └─ ...
+  ├─ generation-Q2             # Question 2
+  ├─ ...
+  └─ generation-Q12            # Question 12
+```
+
+### View Results
+
+1. Open Langfuse UI: `http://localhost:3000`
+2. Navigate to **Traces** tab
+3. Filter by model name: `benchmark-llama3.1:8b`
+4. Click on a trace to see:
+   - Full question prompts and responses
+   - Optimization iterations and strategies used
+   - Response times and token counts
+   - Final scores per question
+
+### Notes
+
+- **Automatic activation**: Langfuse is enabled automatically when API keys are present
+- **Graceful fallback**: Benchmark continues normally if Langfuse is unavailable
+- **SDK version**: Requires `langfuse>=3.10.3` (SDK v3 with OpenTelemetry)
+
+---
+
 ## 📜 License
 
 MIT — use freely in red team labs, commercial pentests, or AI research.
