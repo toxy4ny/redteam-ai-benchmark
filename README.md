@@ -1,5 +1,7 @@
 # 🧪 Red Team AI Benchmark: Evaluating Uncensored LLMs for Offensive Security
 
+🌐 **[Русская версия / Russian version](README.ru.md)**
+
 > **How to objectively measure if an AI assistant is truly useful for real-world penetration testing — or just another censored chatbot.**
 
 ---
