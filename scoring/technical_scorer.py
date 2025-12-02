@@ -1,7 +1,7 @@
 """Technical scorer combining semantic similarity and keyword matching."""
 
 import re
-from typing import Dict, List, Optional, Set
+from typing import Dict, Optional, Set
 
 from .base import BaseScorer, ScoringResult
 from .keyword_scorer import is_censored_response
