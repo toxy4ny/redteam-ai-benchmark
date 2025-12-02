@@ -42,16 +42,16 @@ class LangfuseTracer:
         self.langfuse = Langfuse(
             public_key=config.public_key,
             secret_key=config.secret_key,
-            base_url=config.host
+            base_url=config.host,
         )
         self.current_trace = None  # root span
-        self.current_span = None   # child span для optimization
+        self.current_span = None  # child span для optimization
 
     def start_benchmark(self, model_name: str, scoring_method: str) -> None:
         """Start trace for model benchmark (SDK v3)."""
         self.current_trace = self.langfuse.start_span(
             name=f"benchmark-{model_name}",
-            metadata={"model": model_name, "scoring_method": scoring_method}
+            metadata={"model": model_name, "scoring_method": scoring_method},
         )
 
     def log_generation(
@@ -74,21 +74,16 @@ class LangfuseTracer:
                     "category": category,
                     "score": score,
                     "model": model,
-                }
+                },
             )
-            gen.update(
-                input=prompt,
-                output=response,
-                usage={"latency_ms": latency_ms}
-            )
+            gen.update(input=prompt, output=response, usage={"latency_ms": latency_ms})
             gen.end()  # ВАЖНО: явно завершаем span
 
     def start_optimization(self, question_id: int, category: str) -> None:
         """Start span for prompt optimization (SDK v3)."""
         if self.current_trace:
             self.current_span = self.current_trace.start_span(
-                name=f"optimization-Q{question_id}",
-                metadata={"category": category}
+                name=f"optimization-Q{question_id}", metadata={"category": category}
             )
 
     def log_optimization_attempt(
@@ -111,12 +106,10 @@ class LangfuseTracer:
                     "strategy": strategy,
                     "score": score,
                     "model": model,
-                }
+                },
             )
             attempt.update(
-                input=prompt,
-                output=response,
-                usage={"latency_ms": latency_ms}
+                input=prompt, output=response, usage={"latency_ms": latency_ms}
             )
             attempt.end()  # ВАЖНО: явно завершаем span
 
@@ -1684,7 +1677,7 @@ Examples:
   uv run run_benchmark.py run ollama -e http://192.168.1.100:11434 -m "mistral"
 
   # Advanced: use different semantic model
-  uv run run_benchmark.py run ollama -m "llama3.1:8b" --semantic --semantic-model all-MiniLM-L6-v2
+  uv run run_benchmark.py run ollama -m "llama3.1:8b" --semantic --semantic-model gte-large-en-v1.5
         """,
     )
 
