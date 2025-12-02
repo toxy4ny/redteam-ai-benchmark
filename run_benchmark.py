@@ -26,7 +26,7 @@ except ImportError:
 
 # Optional Langfuse support
 try:
-    from langfuse import get_client
+    from langfuse import Langfuse
 
     LANGFUSE_AVAILABLE = True
 except ImportError:
@@ -39,10 +39,10 @@ class LangfuseTracer:
 
     def __init__(self, config):
         """Initialize Langfuse client (SDK v3)."""
-        self.langfuse = get_client(
-            secret_key=config.secret_key,
+        self.langfuse = Langfuse(
             public_key=config.public_key,
-            host=config.host,
+            secret_key=config.secret_key,
+            base_url=config.host
         )
         self.current_trace = None  # root span
         self.current_span = None   # child span для optimization
