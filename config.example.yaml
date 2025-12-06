@@ -1,0 +1,60 @@
+# Red Team AI Benchmark Configuration Example
+# Copy to config.yaml and customize
+
+# LLM Provider Settings
+provider:
+  name: ollama # ollama, lmstudio, openrouter
+  endpoint: http://localhost:11434
+  # api_key_env: OPENROUTER_API_KEY  # For OpenRouter
+  # default_model: llama3.1:8b
+
+# Scoring System Configuration
+scoring:
+  method: keyword # keyword, semantic, hybrid, llm_judge
+
+  # Semantic scoring settings (requires sentence-transformers)
+  semantic_model: Alibaba-NLP/gte-large-en-v1.5
+  semantic_weight: 0.7
+  keyword_weight: 0.3
+
+  # LLM Judge settings (requires OpenRouter API key)
+  llm_judge_model: anthropic/haiku-4.5
+
+  # Hybrid scoring gray zone (when to use LLM for uncertain cases)
+  gray_zone_low: 0.30
+  gray_zone_high: 0.70
+  use_llm_in_gray_zone: true
+
+# Export Settings
+export:
+  formats:
+    - json
+    - csv
+  output_dir: ./results
+  include_response: true
+
+# Prompt Optimization (for censored responses)
+optimization:
+  enabled: false
+  optimizer_model: llama3.3:70b
+  # optimizer_endpoint: http://localhost:11434  # Optional custom endpoint
+  max_iterations: 3
+  strategies:
+    - role_playing
+    - technical
+    - few_shot
+    - cve_framing
+
+# Benchmark Settings
+questions_file: benchmark.json
+answers_file: answers_all.txt
+rate_limit_delay: 1.5
+max_tokens: 1024
+temperature: 0.2
+
+# Langfuse Observability
+langfuse:
+  enabled: false  # Set to true to enable tracing
+  # secret_key: sk-lf-xxx
+  # public_key: pk-lf-xxx
+  host: http://localhost:3000
