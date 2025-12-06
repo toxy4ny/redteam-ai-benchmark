@@ -28,10 +28,11 @@ This is the **Red Team AI Benchmark v1.0** - a tool for evaluating uncensored LL
 
 ### Supported Providers
 
-The benchmark supports three LLM API providers:
+The benchmark supports four LLM API providers:
 
 - **LM Studio**: OpenAI-compatible API (default: `http://localhost:1234`)
 - **Ollama**: Native Ollama API (default: `http://localhost:11434`)
+- **OpenWebUI**: OpenAI-compatible API with optional auth (default: `http://localhost:3000`)
 - **OpenRouter**: Cloud API for 100+ models (default: `https://openrouter.ai/api/v1`)
 
 ### Quick Start
@@ -45,6 +46,9 @@ uv run run_benchmark.py ls lmstudio
 # List models from Ollama
 uv run run_benchmark.py ls ollama
 
+# List models from OpenWebUI
+uv run run_benchmark.py ls openwebui
+
 # List models from custom endpoint
 uv run run_benchmark.py ls ollama -e http://192.168.1.100:11434
 ```
@@ -57,6 +61,12 @@ uv run run_benchmark.py run lmstudio -m "mistral-7b-instruct"
 
 # Ollama
 uv run run_benchmark.py run ollama -m "llama3.1:8b"
+
+# OpenWebUI (no auth)
+uv run run_benchmark.py run openwebui -m "llama3.1:8b"
+
+# OpenWebUI (with auth)
+uv run run_benchmark.py run openwebui -m "llama3.1:8b" --api-key "sk-..."
 
 # Custom endpoint
 uv run run_benchmark.py run ollama -e http://192.168.1.100:11434 -m "mistral"
@@ -80,6 +90,9 @@ uv run run_benchmark.py interactive ollama
 
 # LM Studio
 uv run run_benchmark.py interactive lmstudio
+
+# OpenWebUI
+uv run run_benchmark.py interactive openwebui
 
 # Custom endpoint
 uv run run_benchmark.py interactive ollama -e http://192.168.1.100:11434
@@ -173,7 +186,14 @@ The script uses an abstract `APIClient` base class with provider-specific implem
 - Models: `/api/tags`
 - Request format: Ollama native (with `options` for temperature, num_predict)
 
-Both clients implement:
+**`OpenWebUIClient`**: OpenWebUI API client (OpenAI-compatible)
+
+- Endpoint: `/api/chat/completions`
+- Models: `/api/models`
+- Request format: OpenAI chat completion
+- Optional Bearer token authentication
+
+All clients implement:
 
 - **Retry logic** with exponential backoff (3 attempts)
 - **Rate limiting** detection and handling
@@ -243,6 +263,7 @@ redteam-ai-benchmark/
 │   ├── base.py              # APIClient abstract base class
 │   ├── lmstudio.py          # LMStudioClient
 │   ├── ollama.py            # OllamaClient
+│   ├── openwebui.py         # OpenWebUIClient (optional auth)
 │   └── openrouter.py        # OpenRouterClient (cloud API)
 │
 ├── scoring/                 # Scoring system implementations
@@ -276,6 +297,14 @@ redteam-ai-benchmark/
 - Models: `/api/tags`
 - Format: Ollama-specific with `options` dict
 - Default URL: `http://localhost:11434`
+
+**OpenWebUI** (OpenAI-compatible):
+
+- Endpoint: `/api/chat/completions`
+- Models: `/api/models`
+- Format: Standard OpenAI chat completion
+- Default URL: `http://localhost:3000`
+- Auth: Optional Bearer token (via `--api-key` or `OPENWEBUI_API_KEY`)
 
 **Common Settings**:
 
@@ -423,6 +452,7 @@ uv run run_benchmark.py ls <provider> [-e ENDPOINT]
 
 # Examples
 uv run run_benchmark.py ls lmstudio
+uv run run_benchmark.py ls openwebui --api-key "sk-..."
 uv run run_benchmark.py ls ollama -e http://192.168.1.100:11434
 ```
 
@@ -455,9 +485,9 @@ uv run run_benchmark.py interactive ollama --semantic
 
 **Common options:**
 
-- `provider`: Choose `lmstudio`, `ollama`, or `openrouter`
-- `-e, --endpoint URL`: Custom endpoint (default: localhost:1234 for lmstudio, localhost:11434 for ollama)
-- `--api-key`: API key for providers that require it (e.g., OpenRouter)
+- `provider`: Choose `lmstudio`, `ollama`, `openwebui`, or `openrouter`
+- `-e, --endpoint URL`: Custom endpoint (defaults: localhost:1234 for lmstudio, localhost:11434 for ollama, localhost:3000 for openwebui)
+- `--api-key`: API key (optional for openwebui, required for openrouter)
 
 **For `run` command:**
 
@@ -548,7 +578,7 @@ return 50  # Partial credit for non-censored responses
 
 ## Important Constraints
 
-- **Triple API support**: LM Studio (OpenAI-compatible), Ollama (native), and OpenRouter (cloud)
+- **Quad API support**: LM Studio, Ollama, OpenWebUI (with optional auth), and OpenRouter
 - **Modular architecture**: Separate modules for models/, scoring/, utils/
 - **Optional dependencies**: Heavy dependencies (sentence-transformers, httpx) are optional
 - **CLI-driven**: Configuration via command-line arguments or YAML config file
@@ -568,9 +598,16 @@ return 50  # Partial credit for non-censored responses
 Create `config.yaml` from `config.example.yaml`:
 
 ```yaml
+# Example: Ollama
 provider:
   name: ollama
   endpoint: http://localhost:11434
+
+# Example: OpenWebUI with optional auth
+# provider:
+#   name: openwebui
+#   endpoint: http://localhost:3000
+#   api_key: sk-xxx  # Optional
 
 scoring:
   method: hybrid
