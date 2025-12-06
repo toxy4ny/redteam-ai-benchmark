@@ -6,6 +6,7 @@ from typing import Optional
 from .base import APIClient
 from .lmstudio import LMStudioClient
 from .ollama import OllamaClient
+from .openwebui import OpenWebUIClient
 
 _httpx_available = importlib.util.find_spec("httpx") is not None
 _tenacity_available = importlib.util.find_spec("tenacity") is not None
@@ -22,6 +23,7 @@ __all__ = [
     "APIClient",
     "LMStudioClient",
     "OllamaClient",
+    "OpenWebUIClient",
     "OpenRouterClient",
     "OPENROUTER_AVAILABLE",
     "create_client",
@@ -52,6 +54,8 @@ def create_client(
             endpoint = "http://localhost:1234"
         elif provider == "ollama":
             endpoint = "http://localhost:11434"
+        elif provider == "openwebui":
+            endpoint = "http://localhost:3000"
         elif provider == "openrouter":
             endpoint = "https://openrouter.ai/api/v1"
         else:
@@ -62,6 +66,8 @@ def create_client(
         return LMStudioClient(endpoint, model)
     elif provider == "ollama":
         return OllamaClient(endpoint, model)
+    elif provider == "openwebui":
+        return OpenWebUIClient(endpoint, model, api_key=api_key)
     elif provider == "openrouter":
         if not OPENROUTER_AVAILABLE:
             raise RuntimeError(
