@@ -14,6 +14,7 @@ class ProviderConfig:
 
     name: str
     endpoint: str
+    api_key: Optional[str] = None
     api_key_env: Optional[str] = None
     default_model: Optional[str] = None
     timeout: int = 120
@@ -94,11 +95,16 @@ DEFAULT_PROVIDERS = {
         name="ollama",
         endpoint="http://localhost:11434",
     ),
+    "openwebui": ProviderConfig(
+        name="openwebui",
+        endpoint="http://localhost:3000",
+        api_key_env="OPENROUTER_API_KEY",
+    ),
     "openrouter": ProviderConfig(
         name="openrouter",
         endpoint="https://openrouter.ai/api/v1",
         api_key_env="OPENROUTER_API_KEY",
-        default_model="anthropic/claude-3.5-sonnet",
+        default_model="anthropic/claude-4.5-haiku",
     ),
 }
 
@@ -108,6 +114,7 @@ def _dict_to_provider_config(data: Dict[str, Any]) -> ProviderConfig:
     return ProviderConfig(
         name=data.get("name", "unknown"),
         endpoint=data.get("endpoint", ""),
+        api_key=data.get("api_key"),
         api_key_env=data.get("api_key_env"),
         default_model=data.get("default_model"),
         timeout=data.get("timeout", 120),
@@ -197,6 +204,7 @@ def load_config(config_path: str) -> BenchmarkConfig:
             provider = ProviderConfig(
                 name=provider_name,
                 endpoint=provider_data["endpoint"],
+                api_key=provider_data.get("api_key"),
                 api_key_env=provider_data.get("api_key_env", provider.api_key_env),
                 default_model=provider_data.get("default_model", provider.default_model),
                 timeout=provider_data.get("timeout", provider.timeout),

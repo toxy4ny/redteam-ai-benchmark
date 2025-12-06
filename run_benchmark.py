@@ -1061,6 +1061,12 @@ def cmd_interactive(args):
                 # Override args with config values if not explicitly set
                 if config.provider.endpoint and not args.endpoint:
                     args.endpoint = config.provider.endpoint
+                    if not getattr(args, "api_key", None):
+                        if config.provider.api_key:
+                            args.api_key = config.provider.api_key
+                        elif config.provider.api_key_env:
+                            import os
+                            args.api_key = os.environ.get(config.provider.api_key_env)
                 if config.scoring.method != "keyword" and args.scorer == "keyword":
                     args.scorer = config.scoring.method
                 if (
@@ -1390,8 +1396,30 @@ def cmd_interactive(args):
 
 def cmd_run_benchmark(args):
     """Run the benchmark."""
+    # Load config if provided and apply to args
+    if getattr(args, "config", None):
+        try:
+            config = load_config(args.config)
+            print(f"📄 Loaded configuration from {args.config}")
+            # Override args with config values if not explicitly set via CLI
+            if not args.endpoint and config.provider.endpoint:
+                args.endpoint = config.provider.endpoint
+            if not getattr(args, "api_key", None):
+                # Try direct api_key first, then env variable
+                if config.provider.api_key:
+                    args.api_key = config.provider.api_key
+                elif config.provider.api_key_env:
+                    import os
+                    args.api_key = os.environ.get(config.provider.api_key_env)
+            # Override provider if specified in config but not in CLI
+            if hasattr(config.provider, 'name') and config.provider.name:
+                args.provider = config.provider.name
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to load config: {e}")
+
     # Create API client
     api_key = getattr(args, "api_key", None)
+    # ... остальной код
     try:
         client = create_client(args.provider, args.endpoint, args.model, api_key)
     except ValueError as e:
