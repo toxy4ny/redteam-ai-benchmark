@@ -98,7 +98,7 @@ DEFAULT_PROVIDERS = {
     "openwebui": ProviderConfig(
         name="openwebui",
         endpoint="http://localhost:3000",
-        api_key_env="OPENROUTER_API_KEY",
+        api_key_env="OPENWEBUI_API_KEY",
     ),
     "openrouter": ProviderConfig(
         name="openrouter",
