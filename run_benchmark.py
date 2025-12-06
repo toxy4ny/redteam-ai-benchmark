@@ -1648,12 +1648,12 @@ Examples:
     # List models command
     parser_ls = subparsers.add_parser("ls", help="List available models")
     parser_ls.add_argument(
-        "provider", choices=["lmstudio", "ollama", "openrouter"], help="API provider"
+        "provider", choices=["lmstudio", "ollama", "openwebui", "openrouter"], help="API provider"
     )
     parser_ls.add_argument(
         "-e",
         "--endpoint",
-        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama)",
+        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama, localhost:3000 for openwebui)",
     )
     parser_ls.add_argument(
         "--api-key",
@@ -1663,13 +1663,13 @@ Examples:
     # Run benchmark command
     parser_run = subparsers.add_parser("run", help="Run benchmark")
     parser_run.add_argument(
-        "provider", choices=["lmstudio", "ollama", "openrouter"], help="API provider"
+        "provider", choices=["lmstudio", "ollama", "openwebui", "openrouter"], help="API provider"
     )
     parser_run.add_argument("-m", "--model", required=True, help="Model name")
     parser_run.add_argument(
         "-e",
         "--endpoint",
-        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama)",
+        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama, localhost:3000 for openwebui)",
     )
     parser_run.add_argument("-o", "--output", help="Custom output filename")
     parser_run.add_argument(
@@ -1727,12 +1727,12 @@ Examples:
         "interactive", help="Interactive TUI for selecting and testing multiple models"
     )
     parser_interactive.add_argument(
-        "provider", choices=["lmstudio", "ollama", "openrouter"], help="API provider"
+        "provider", choices=["lmstudio", "ollama", "openwebui", "openrouter"], help="API provider"
     )
     parser_interactive.add_argument(
         "-e",
         "--endpoint",
-        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama)",
+        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama, localhost:3000 for openwebui)",
     )
     parser_interactive.add_argument(
         "--api-key",
