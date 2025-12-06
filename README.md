@@ -1,4 +1,4 @@
-# 🧪 Red Team AI Benchmark: Evaluating Uncensored LLMs for Offensive Security
+# 🧪 Red Team AI Benchmark: Evaluating Uncensored LLMs for Offensive Security mutualy with POXEK AI (https://github.com/szybnev/)
 
 🌐 **[Русская версия / Russian version](README.ru.md)**
 
