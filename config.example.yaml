@@ -3,10 +3,17 @@
 
 # LLM Provider Settings
 provider:
-  name: ollama # ollama, lmstudio, openrouter
+  name: ollama # ollama, lmstudio, openwebui, openrouter
   endpoint: http://localhost:11434
-  # api_key_env: OPENROUTER_API_KEY  # For OpenRouter
+  # api_key: sk-xxx           # API key (optional for openwebui, required for openrouter)
+  # api_key_env: OPENROUTER_API_KEY  # Or use env variable
   # default_model: llama3.1:8b
+
+# OpenWebUI Provider Example (uncomment to use):
+# provider:
+#   name: openwebui
+#   endpoint: http://localhost:3000
+#   api_key: sk-xxx  # Optional - only if auth is enabled on your instance
 
 # Scoring System Configuration
 scoring:

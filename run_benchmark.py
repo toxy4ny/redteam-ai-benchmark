@@ -15,7 +15,7 @@ from pick import pick
 # Import modular components
 from models import OllamaClient, create_client
 from scoring.keyword_scorer import is_censored_response
-from utils import load_config
+from utils import config, load_config
 
 # Optional semantic similarity support
 try:
@@ -1061,6 +1061,13 @@ def cmd_interactive(args):
                 # Override args with config values if not explicitly set
                 if config.provider.endpoint and not args.endpoint:
                     args.endpoint = config.provider.endpoint
+                if not getattr(args, "api_key", None):
+                    if config.provider.api_key:
+                        args.api_key = config.provider.api_key
+                    elif config.provider.api_key_env:
+                        import os
+                        args.api_key = os.environ.get(config.provider.api_key_env)
+                # Override scoring settings from config
                 if config.scoring.method != "keyword" and args.scorer == "keyword":
                     args.scorer = config.scoring.method
                 if (
@@ -1068,6 +1075,15 @@ def cmd_interactive(args):
                     and args.semantic_model == "Alibaba-NLP/gte-large-en-v1.5"
                 ):
                     args.semantic_model = config.scoring.semantic_model
+                # Override optimization settings from config
+                if config.optimization.enabled and not args.optimize_prompts:
+                    args.optimize_prompts = True
+                if config.optimization.optimizer_model and args.optimizer_model == "llama3.3:70b":
+                    args.optimizer_model = config.optimization.optimizer_model
+                if config.optimization.optimizer_endpoint and not args.optimizer_endpoint:
+                    args.optimizer_endpoint = config.optimization.optimizer_endpoint
+                if config.optimization.max_iterations != 3:
+                    args.max_optimization_iterations = config.optimization.max_iterations
             except Exception as e:
                 print(f"⚠️  Warning: Failed to load config: {e}")
 
@@ -1390,9 +1406,8 @@ def cmd_interactive(args):
 
 def cmd_run_benchmark(args):
     """Run the benchmark."""
-    # Create API client
-    api_key = getattr(args, "api_key", None)
     try:
+        api_key = getattr(args, "api_key", None)
         client = create_client(args.provider, args.endpoint, args.model, api_key)
     except ValueError as e:
         print(f"❌ Error: {e}")
@@ -1466,16 +1481,13 @@ def cmd_run_benchmark(args):
 
     # Initialize Langfuse tracer if config provided
     tracer = None
-    if getattr(args, "config", None):
+    if config and config.langfuse.enabled and LANGFUSE_AVAILABLE:
         try:
-            config = load_config(args.config)
-            if config.langfuse.enabled and LANGFUSE_AVAILABLE:
-                tracer = LangfuseTracer(config.langfuse)
-                tracer.start_benchmark(args.model, scoring_method)
-                print("✓ Langfuse tracing enabled\n")
+            tracer = LangfuseTracer(config.langfuse)
+            tracer.start_benchmark(args.model, scoring_method)
+            print("✓ Langfuse tracing enabled\n")
         except Exception as e:
             print(f"⚠️  Warning: Failed to initialize Langfuse: {e}\n")
-
     results = []
     for q in questions:
         print(f"[Q{q['id']:>2}] {q['category']}...")
@@ -1648,28 +1660,32 @@ Examples:
     # List models command
     parser_ls = subparsers.add_parser("ls", help="List available models")
     parser_ls.add_argument(
-        "provider", choices=["lmstudio", "ollama", "openrouter"], help="API provider"
+        "provider", choices=["lmstudio", "ollama", "openwebui", "openrouter"], help="API provider"
     )
     parser_ls.add_argument(
         "-e",
         "--endpoint",
-        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama)",
+        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama, localhost:3000 for openwebui)",
     )
     parser_ls.add_argument(
         "--api-key",
         help="API key for providers that require it (e.g., OpenRouter)",
     )
+    parser_ls.add_argument(
+        "--config",
+        help="Load configuration from YAML file",
+    )
 
     # Run benchmark command
     parser_run = subparsers.add_parser("run", help="Run benchmark")
     parser_run.add_argument(
-        "provider", choices=["lmstudio", "ollama", "openrouter"], help="API provider"
+        "provider", choices=["lmstudio", "ollama", "openwebui", "openrouter"], help="API provider"
     )
     parser_run.add_argument("-m", "--model", required=True, help="Model name")
     parser_run.add_argument(
         "-e",
         "--endpoint",
-        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama)",
+        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama, localhost:3000 for openwebui)",
     )
     parser_run.add_argument("-o", "--output", help="Custom output filename")
     parser_run.add_argument(
@@ -1727,12 +1743,12 @@ Examples:
         "interactive", help="Interactive TUI for selecting and testing multiple models"
     )
     parser_interactive.add_argument(
-        "provider", choices=["lmstudio", "ollama", "openrouter"], help="API provider"
+        "provider", choices=["lmstudio", "ollama", "openwebui", "openrouter"], help="API provider"
     )
     parser_interactive.add_argument(
         "-e",
         "--endpoint",
-        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama)",
+        help="Custom endpoint URL (default: localhost:1234 for lmstudio, localhost:11434 for ollama, localhost:3000 for openwebui)",
     )
     parser_interactive.add_argument(
         "--api-key",

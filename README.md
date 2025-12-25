@@ -1,4 +1,4 @@
-# 🧪 Red Team AI Benchmark: Evaluating Uncensored LLMs for Offensive Security mutualy with POXEK AI (https://github.com/szybnev/)
+# 🧪 Red Team AI Benchmark: Evaluating Uncensored LLMs for Offensive Security mutualy with [POXEK AI](https://github.com/szybnev/)
 
 🌐 **[Русская версия / Russian version](README.ru.md)**
 
@@ -64,7 +64,7 @@ For each question:
 
 ### Prerequisites
 
-- **LLM Provider**: [Ollama](https://ollama.com/), [LM Studio](https://lmstudio.ai/), or [OpenRouter](https://openrouter.ai/) (cloud)
+- **LLM Provider**: [Ollama](https://ollama.com/), [LM Studio](https://lmstudio.ai/), [OpenWebUI](https://openwebui.com/), or [OpenRouter](https://openrouter.ai/) (cloud)
 - **Python**: 3.13+ (recommended to use [uv](https://github.com/astral-sh/uv) for dependency management)
 - **Dependencies**: Automatically installed via `uv sync`
 
@@ -217,6 +217,24 @@ ollama pull llama3.1:8b  # Load a model
 export OPENROUTER_API_KEY="your-api-key"
 uv run run_benchmark.py run openrouter -m "anthropic/claude-3.5-sonnet"
 ```
+
+#### Option D: OpenWebUI
+
+[OpenWebUI](https://openwebui.com/) is an open-source LLM frontend that provides a unified API for multiple backends. Authentication is optional.
+
+```bash
+# Without authentication (local instance)
+uv run run_benchmark.py run openwebui -m "llama3.1:8b"
+
+# With authentication
+uv run run_benchmark.py run openwebui -m "llama3.1:8b" --api-key "sk-..."
+
+# Or use environment variable
+export OPENWEBUI_API_KEY="sk-..."
+uv run run_benchmark.py run openwebui -m "llama3.1:8b"
+```
+
+Default endpoint: `http://localhost:3000`. Use `-e` to specify custom endpoint.
 
 ### 3. Run the Benchmark
 
