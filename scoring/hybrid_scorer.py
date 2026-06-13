@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from .technical_scorer import TechnicalScorer
 
 from .base import BaseScorer, ScoringResult
+from .constants import DEFAULT_SEMANTIC_MODEL
 from .keyword_scorer import is_censored_response
 
 
@@ -177,7 +178,7 @@ class HybridScorer(BaseScorer):
 
 
 def create_hybrid_scorer(
-    model_name: str = "Alibaba-NLP/gte-large-en-v1.5",
+    model_name: str = DEFAULT_SEMANTIC_MODEL,
     openrouter_api_key: Optional[str] = None,
     llm_model: str = "anthropic/claude-3.5-sonnet",
     reference_answers: Optional[Dict[int, str]] = None,

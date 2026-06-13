@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from scoring.constants import DEFAULT_SEMANTIC_MODEL
+
 
 @dataclass
 class ProviderConfig:
@@ -25,7 +27,7 @@ class ScoringConfig:
     """Configuration for scoring system."""
 
     method: str = "keyword"  # keyword, semantic, hybrid, llm_judge
-    semantic_model: str = "Alibaba-NLP/gte-large-en-v1.5"
+    semantic_model: str = DEFAULT_SEMANTIC_MODEL
     semantic_weight: float = 0.7
     keyword_weight: float = 0.3
     llm_judge_model: str = "anthropic/claude-3.5-sonnet"
@@ -126,7 +128,7 @@ def _dict_to_scoring_config(data: Dict[str, Any]) -> ScoringConfig:
     """Convert dict to ScoringConfig."""
     return ScoringConfig(
         method=data.get("method", "keyword"),
-        semantic_model=data.get("semantic_model", "Alibaba-NLP/gte-large-en-v1.5"),
+        semantic_model=data.get("semantic_model", DEFAULT_SEMANTIC_MODEL),
         semantic_weight=data.get("semantic_weight", 0.7),
         keyword_weight=data.get("keyword_weight", 0.3),
         llm_judge_model=data.get("llm_judge_model", "anthropic/claude-3.5-sonnet"),

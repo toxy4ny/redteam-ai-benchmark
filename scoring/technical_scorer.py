@@ -4,6 +4,7 @@ import re
 from typing import Dict, Optional, Set
 
 from .base import BaseScorer, ScoringResult
+from .constants import DEFAULT_SEMANTIC_MODEL
 from .keyword_scorer import is_censored_response
 
 # Optional semantic support
@@ -128,7 +129,7 @@ class TechnicalScorer(BaseScorer):
     - Keyword matching: 0.3
     """
 
-    DEFAULT_MODEL = "Alibaba-NLP/gte-large-en-v1.5"
+    DEFAULT_MODEL = DEFAULT_SEMANTIC_MODEL
 
     def __init__(
         self,

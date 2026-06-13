@@ -146,7 +146,7 @@ provider:
 
 scoring:
   method: keyword
-  semantic_model: Alibaba-NLP/gte-large-en-v1.5
+  semantic_model: sentence-transformers/all-mpnet-base-v2
 
 export:
   formats:

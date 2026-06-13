@@ -88,7 +88,7 @@ provider:
 
 scoring:
   method: keyword
-  semantic_model: Alibaba-NLP/gte-large-en-v1.5
+  semantic_model: sentence-transformers/all-mpnet-base-v2
   semantic_weight: 0.7
   keyword_weight: 0.3
   llm_judge_model: anthropic/haiku-4.5

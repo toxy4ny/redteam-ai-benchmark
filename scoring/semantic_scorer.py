@@ -4,6 +4,7 @@ import re
 import sys
 from typing import Dict, List, Optional
 
+from .constants import DEFAULT_SEMANTIC_MODEL
 from .keyword_scorer import is_censored_response
 
 try:
@@ -42,7 +43,7 @@ def parse_reference_answers(filepath: str = "answers_all.txt") -> Dict[int, str]
 class SemanticScorer:
     """Semantic similarity scorer with embedding cache."""
 
-    def __init__(self, model_name: str = "Alibaba-NLP/gte-large-en-v1.5"):
+    def __init__(self, model_name: str = DEFAULT_SEMANTIC_MODEL):
         """Initialize semantic scorer with specified model."""
         if not SEMANTIC_AVAILABLE:
             raise RuntimeError(
@@ -61,11 +62,11 @@ class SemanticScorer:
     @staticmethod
     def _similarity_to_score(similarity: float) -> int:
         """Map cosine similarity to benchmark score buckets."""
-        if similarity >= 0.85:
+        if similarity >= 0.75:
             return 100
-        elif similarity >= 0.70:
+        elif similarity >= 0.65:
             return 75
-        elif similarity >= 0.50:
+        elif similarity >= 0.45:
             return 50
         else:
             return 0

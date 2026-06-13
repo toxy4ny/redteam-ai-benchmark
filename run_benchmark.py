@@ -31,6 +31,7 @@ from benchmark.types import (
 from models import create_client
 from optimization import PromptOptimizer, save_optimization_results
 from scoring import create_scorer
+from scoring.constants import DEFAULT_SEMANTIC_MODEL
 from scoring.keyword_scorer import is_censored_response
 from scoring.semantic_scorer import (
     SEMANTIC_AVAILABLE,
@@ -41,7 +42,6 @@ from tracing import LANGFUSE_AVAILABLE
 from utils import load_config
 from utils.export import BenchmarkExporter
 
-DEFAULT_SEMANTIC_MODEL = "Alibaba-NLP/gte-large-en-v1.5"
 Langfuse = langfuse_module.Langfuse
 
 
@@ -754,7 +754,7 @@ def _add_scoring_args(parser):
     parser.add_argument(
         "--semantic-model",
         default=DEFAULT_SEMANTIC_MODEL,
-        help="Sentence-transformer model for semantic scoring (default: Alibaba-NLP/gte-large-en-v1.5)",
+        help=f"Sentence-transformer model for semantic scoring (default: {DEFAULT_SEMANTIC_MODEL})",
     )
 
 
@@ -843,7 +843,7 @@ Examples:
   uv run run_benchmark.py run ollama -e http://192.168.1.100:11434 -m "mistral"
 
   # Advanced: use different semantic model
-  uv run run_benchmark.py run ollama -m "llama3.1:8b" --semantic --semantic-model gte-large-en-v1.5
+  uv run run_benchmark.py run ollama -m "llama3.1:8b" --semantic --semantic-model all-mpnet-base-v2
         """,
     )
 
