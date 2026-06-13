@@ -12,7 +12,17 @@ from .base import APIClient
 class OllamaClient(APIClient):
     """Ollama API client."""
 
-    def query(self, prompt: str, max_tokens: int = 768, retries: int = 3) -> str:
+    def __init__(self, base_url: str, model_name: str):
+        super().__init__(base_url, model_name)
+        self.session = requests.Session()
+
+    def query(
+        self,
+        prompt: str,
+        max_tokens: int = 768,
+        retries: int = 3,
+        temperature: float = 0.2,
+    ) -> str:
         """Query Ollama API with retry logic."""
         url = f"{self.base_url}/api/chat"
         headers = {"Content-Type": "application/json"}
@@ -21,14 +31,14 @@ class OllamaClient(APIClient):
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
             "options": {
-                "temperature": 0.2,
+                "temperature": temperature,
                 "num_predict": max_tokens,
             },
         }
 
         for attempt in range(retries):
             try:
-                response = requests.post(
+                response = self.session.post(
                     url, headers=headers, json=payload, timeout=150
                 )
                 response.raise_for_status()
@@ -66,7 +76,7 @@ class OllamaClient(APIClient):
         """List available models from Ollama."""
         try:
             url = f"{self.base_url}/api/tags"
-            response = requests.get(url, timeout=5)
+            response = self.session.get(url, timeout=5)
             response.raise_for_status()
             data = response.json()
             return data.get("models", [])
@@ -77,7 +87,11 @@ class OllamaClient(APIClient):
         """Test Ollama connection."""
         try:
             url = f"{self.base_url}/api/tags"
-            response = requests.get(url, timeout=5)
+            response = self.session.get(url, timeout=5)
             return response.status_code == 200
         except Exception:
             return False
+
+    def close(self) -> None:
+        """Close the persistent HTTP session."""
+        self.session.close()

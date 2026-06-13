@@ -82,6 +82,7 @@ class BenchmarkConfig:
     rate_limit_delay: float = 1.5
     max_tokens: int = 768
     temperature: float = 0.2
+    concurrency: int = 1
 
 
 # Default providers configuration
@@ -221,6 +222,7 @@ def load_config(config_path: str) -> BenchmarkConfig:
         rate_limit_delay=data.get("rate_limit_delay", 1.5),
         max_tokens=data.get("max_tokens", 768),
         temperature=data.get("temperature", 0.2),
+        concurrency=data.get("concurrency", 1),
     )
 
 
@@ -287,6 +289,7 @@ def save_config(config: BenchmarkConfig, config_path: str) -> None:
         "rate_limit_delay": config.rate_limit_delay,
         "max_tokens": config.max_tokens,
         "temperature": config.temperature,
+        "concurrency": config.concurrency,
     }
 
     # Add optional fields

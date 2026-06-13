@@ -38,6 +38,10 @@ Common options:
 - `--optimizer-model`: optimizer model name.
 - `--optimizer-endpoint`: separate optimizer endpoint.
 - `--max-optimization-iterations`: per-question optimization cap.
+- `--rate-limit-delay`: delay between benchmark request starts; `0` disables artificial delay.
+- `--max-tokens`: max response tokens for benchmark target-model questions.
+- `--temperature`: target-model temperature for benchmark questions.
+- `--concurrency`: number of concurrent benchmark questions. Optimization and Langfuse paths run sequentially for now.
 - `--export-csv`: parser exposes it; verify behavior before documenting as primary output.
 - `--scorer`: parser exposes `keyword`, `semantic`, `hybrid`, `llm_judge`; verify non-default paths before relying on them.
 
@@ -106,6 +110,7 @@ answers_file: answers_all.txt
 rate_limit_delay: 1.5
 max_tokens: 1024
 temperature: 0.2
+concurrency: 1
 
 langfuse:
   enabled: false

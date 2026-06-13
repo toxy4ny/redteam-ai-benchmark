@@ -12,7 +12,13 @@ class APIClient(ABC):
         self.model_name = model_name
 
     @abstractmethod
-    def query(self, prompt: str, max_tokens: int = 1024, retries: int = 3) -> str:
+    def query(
+        self,
+        prompt: str,
+        max_tokens: int = 1024,
+        retries: int = 3,
+        temperature: float = 0.2,
+    ) -> str:
         """Query the LLM API with retry logic."""
         pass
 
@@ -25,3 +31,13 @@ class APIClient(ABC):
     def test_connection(self) -> bool:
         """Test if API is accessible."""
         pass
+
+    def close(self) -> None:
+        """Close any persistent client resources."""
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()

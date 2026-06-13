@@ -12,21 +12,31 @@ from .base import APIClient
 class LMStudioClient(APIClient):
     """LM Studio API client (OpenAI-compatible)."""
 
-    def query(self, prompt: str, max_tokens: int = 768, retries: int = 3) -> str:
+    def __init__(self, base_url: str, model_name: str):
+        super().__init__(base_url, model_name)
+        self.session = requests.Session()
+
+    def query(
+        self,
+        prompt: str,
+        max_tokens: int = 768,
+        retries: int = 3,
+        temperature: float = 0.2,
+    ) -> str:
         """Query LM Studio API with retry logic."""
         url = f"{self.base_url}/v1/chat/completions"
         headers = {"Content-Type": "application/json"}
         payload = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
+            "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
         }
 
         for attempt in range(retries):
             try:
-                response = requests.post(
+                response = self.session.post(
                     url, headers=headers, json=payload, timeout=150
                 )
                 response.raise_for_status()
@@ -63,7 +73,7 @@ class LMStudioClient(APIClient):
         """List available models from LM Studio."""
         try:
             url = f"{self.base_url}/v1/models"
-            response = requests.get(url, timeout=5)
+            response = self.session.get(url, timeout=5)
             response.raise_for_status()
             data = response.json()
             return data.get("data", [])
@@ -74,7 +84,11 @@ class LMStudioClient(APIClient):
         """Test LM Studio connection."""
         try:
             url = f"{self.base_url}/v1/models"
-            response = requests.get(url, timeout=5)
+            response = self.session.get(url, timeout=5)
             return response.status_code == 200
         except Exception:
             return False
+
+    def close(self) -> None:
+        """Close the persistent HTTP session."""
+        self.session.close()

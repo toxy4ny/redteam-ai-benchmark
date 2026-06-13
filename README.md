@@ -106,6 +106,13 @@ uv run run_benchmark.py run ollama -m "llama3.1:8b" --semantic
 uv run run_benchmark.py run ollama -m "llama3.1:8b" --semantic --semantic-model all-mpnet-base-v2
 ```
 
+Tune runtime speed settings:
+
+```bash
+uv run run_benchmark.py run ollama -m "llama3.1:8b" --rate-limit-delay 0 --max-tokens 256
+uv run run_benchmark.py run openrouter -m "anthropic/claude-3.5-sonnet" --api-key "$OPENROUTER_API_KEY" --concurrency 3
+```
+
 Run the interactive TUI for multiple models:
 
 ```bash
@@ -149,6 +156,7 @@ answers_file: answers_all.txt
 rate_limit_delay: 1.5
 max_tokens: 1024
 temperature: 0.2
+concurrency: 1
 ```
 
 Run with a config file:

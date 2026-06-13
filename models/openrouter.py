@@ -57,6 +57,8 @@ class OpenRouterClient(APIClient):
                 "Set OPENROUTER_API_KEY environment variable or pass api_key parameter."
             )
 
+        self.client = httpx.Client(timeout=self.timeout)
+
     def _get_headers(self) -> Dict[str, str]:
         """Get request headers including auth and optional site info."""
         return {
@@ -76,23 +78,28 @@ class OpenRouterClient(APIClient):
             reraise=True,
         )
         def _request():
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self._get_headers(),
-                    json=payload,
-                )
+            response = self.client.post(
+                f"{self.base_url}/chat/completions",
+                headers=self._get_headers(),
+                json=payload,
+            )
 
-                # Handle rate limiting
-                if response.status_code == 429:
-                    raise RuntimeError("Rate limited by OpenRouter")
+            # Handle rate limiting
+            if response.status_code == 429:
+                raise RuntimeError("Rate limited by OpenRouter")
 
-                response.raise_for_status()
-                return response.json()
+            response.raise_for_status()
+            return response.json()
 
         return _request()
 
-    def query(self, prompt: str, max_tokens: int = 768, retries: int = 3) -> str:
+    def query(
+        self,
+        prompt: str,
+        max_tokens: int = 768,
+        retries: int = 3,
+        temperature: float = 0.2,
+    ) -> str:
         """
         Query OpenRouter API.
 
@@ -107,7 +114,7 @@ class OpenRouterClient(APIClient):
         payload = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
+            "temperature": temperature,
             "max_tokens": max_tokens,
         }
 
@@ -133,14 +140,13 @@ class OpenRouterClient(APIClient):
             List of model dictionaries with id, name, pricing, etc.
         """
         try:
-            with httpx.Client(timeout=30) as client:
-                response = client.get(
-                    f"{self.base_url}/models",
-                    headers=self._get_headers(),
-                )
-                response.raise_for_status()
-                data = response.json()
-                return data.get("data", [])
+            response = self.client.get(
+                f"{self.base_url}/models",
+                headers=self._get_headers(),
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("data", [])
         except Exception as e:
             raise RuntimeError(f"Failed to list models: {e}") from e
 
@@ -167,3 +173,7 @@ class OpenRouterClient(APIClient):
             return None
         except Exception:
             return None
+
+    def close(self) -> None:
+        """Close the persistent HTTP client."""
+        self.client.close()

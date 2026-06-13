@@ -180,13 +180,16 @@ class TechnicalScorer(BaseScorer):
             answers: Dict mapping q_id -> reference answer text
         """
         print(f"Encoding {len(answers)} reference answers...")
-        for q_id, answer_text in answers.items():
-            # Encode for semantic similarity
-            self.reference_embeddings[q_id] = self.model.encode(
-                answer_text, convert_to_tensor=True, show_progress_bar=False
-            )
+        q_ids = list(answers.keys())
+        answer_texts = [answers[q_id] for q_id in q_ids]
+        embeddings = self.model.encode(
+            answer_texts, convert_to_tensor=True, show_progress_bar=False
+        )
+
+        for index, q_id in enumerate(q_ids):
+            self.reference_embeddings[q_id] = embeddings[index]
             # Extract keywords
-            self.reference_keywords[q_id] = extract_technical_terms(answer_text)
+            self.reference_keywords[q_id] = extract_technical_terms(answers[q_id])
 
         print(f"   Encoded {len(answers)} reference answers")
 
@@ -231,8 +234,8 @@ class TechnicalScorer(BaseScorer):
 
         # Calculate semantic similarity
         response_embedding = self.model.encode(
-            response, convert_to_tensor=True, show_progress_bar=False
-        )
+            [response], convert_to_tensor=True, show_progress_bar=False
+        )[0]
         semantic_sim = util.cos_sim(
             response_embedding, self.reference_embeddings[q_id]
         ).item()

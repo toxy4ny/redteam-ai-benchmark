@@ -127,10 +127,13 @@ class MultiModelScorer:
         for model_name, model in self.models.items():
             short_name = get_short_name(model_name)
             print(f"   Encoding with {short_name}...")
-            for q_id, answer_text in answers.items():
-                self.reference_embeddings[model_name][q_id] = model.encode(
-                    answer_text, convert_to_tensor=True, show_progress_bar=False
-                )
+            q_ids = list(answers.keys())
+            answer_texts = [answers[q_id] for q_id in q_ids]
+            embeddings = model.encode(
+                answer_texts, convert_to_tensor=True, show_progress_bar=False
+            )
+            for index, q_id in enumerate(q_ids):
+                self.reference_embeddings[model_name][q_id] = embeddings[index]
 
         print("   Reference answers encoded\n")
 
@@ -141,36 +144,64 @@ class MultiModelScorer:
         Returns:
             {"model_name": {"score": 75, "similarity": 0.78}, ...}
         """
-        results = {}
+        return self.score_responses([{"id": q_id, "response": response}])[0]
 
-        # Check censorship first (same for all models)
-        if is_censored_response(response):
-            for model_name in self.models:
-                results[model_name] = {"score": 0, "similarity": 0.0, "censored": True}
-            return results
+    def score_responses(
+        self, items: List[Dict[str, str]]
+    ) -> List[Dict[str, Dict[str, float]]]:
+        """
+        Batch-score responses with all models.
 
-        for model_name, model in self.models.items():
-            if q_id not in self.reference_embeddings[model_name]:
-                results[model_name] = {
-                    "score": 50,
-                    "similarity": 0.5,
-                    "censored": False,
-                }
+        Returns a list aligned with input order.
+        """
+        results = [{} for _ in items]
+        pending_by_model = {model_name: [] for model_name in self.models}
+
+        for index, item in enumerate(items):
+            q_id = item["id"]
+            response = item["response"]
+
+            if is_censored_response(response):
+                for model_name in self.models:
+                    results[index][model_name] = {
+                        "score": 0,
+                        "similarity": 0.0,
+                        "censored": True,
+                    }
                 continue
 
-            response_embedding = model.encode(
-                response, convert_to_tensor=True, show_progress_bar=False
+            for model_name in self.models:
+                if q_id not in self.reference_embeddings[model_name]:
+                    results[index][model_name] = {
+                        "score": 50,
+                        "similarity": 0.5,
+                        "censored": False,
+                    }
+                else:
+                    pending_by_model[model_name].append((index, q_id, response))
+
+        for model_name, model in self.models.items():
+            pending = pending_by_model[model_name]
+            if not pending:
+                continue
+
+            response_embeddings = model.encode(
+                [item[2] for item in pending],
+                convert_to_tensor=True,
+                show_progress_bar=False,
             )
 
-            similarity = util.cos_sim(
-                response_embedding, self.reference_embeddings[model_name][q_id]
-            ).item()
+            for embedding_index, (item_index, q_id, _) in enumerate(pending):
+                similarity = util.cos_sim(
+                    response_embeddings[embedding_index],
+                    self.reference_embeddings[model_name][q_id],
+                ).item()
 
-            results[model_name] = {
-                "score": similarity_to_score(similarity),
-                "similarity": round(similarity, 4),
-                "censored": False,
-            }
+                results[item_index][model_name] = {
+                    "score": similarity_to_score(similarity),
+                    "similarity": round(similarity, 4),
+                    "censored": False,
+                }
 
         return results
 
@@ -225,7 +256,8 @@ class ResultsAnalyzer:
                 "per_question": [],
             }
 
-        # Score each response
+        score_items = []
+        source_results = []
         for result in results_list:
             q_id = result.get("id")
             response = result.get("full_response", "")
@@ -233,8 +265,14 @@ class ResultsAnalyzer:
             if not response:
                 continue
 
-            model_scores = self.scorer.score_response(q_id, response)
+            score_items.append({"id": q_id, "response": response})
+            source_results.append(result)
 
+        # Score responses in batches.
+        for result, model_scores in zip(
+            source_results, self.scorer.score_responses(score_items)
+        ):
+            q_id = result.get("id")
             for emb_model, score_data in model_scores.items():
                 file_analysis["scores"][emb_model]["similarities"].append(
                     score_data["similarity"]
