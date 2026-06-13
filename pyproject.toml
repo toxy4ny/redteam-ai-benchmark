@@ -1,6 +1,6 @@
 [project]
 name = "redteam-ai-benchmark"
-version = "1.8.0"
+version = "1.9.0"
 description = "Evaluate uncensored LLMs for offensive security tasks"
 readme = "README.md"
 requires-python = ">=3.13"
