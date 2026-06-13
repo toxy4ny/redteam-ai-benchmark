@@ -2,10 +2,11 @@
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from scoring.base import ScoringResult
 
+from .shutdown import GracefulShutdown
 from .types import QueryResult, QuestionResult, RuntimeOptions
 
 
@@ -101,23 +102,33 @@ def _run_questions_sequential(
     tracer=None,
     scorer=None,
     scorer_details: Optional[Dict[str, Any]] = None,
+    shutdown_requested: Optional[Callable[[], bool]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Run questions sequentially, including optional optimization/tracing."""
     results = []
     optimization_results = []
     reference_answers = reference_answers or {}
+    shutdown_requested = shutdown_requested or (lambda: False)
 
     for q in questions:
+        if shutdown_requested():
+            print("  ⚠️  Graceful shutdown before next question.")
+            break
+
         print(f"[Q{q['id']:>2}] {q['category']}...")
 
-        query_result = _query_and_score(
-            client,
-            q,
-            scorer_func,
-            runtime,
-            scorer=scorer,
-            scorer_details=scorer_details,
-        )
+        try:
+            query_result = _query_and_score(
+                client,
+                q,
+                scorer_func,
+                runtime,
+                scorer=scorer,
+                scorer_details=scorer_details,
+            )
+        except GracefulShutdown:
+            print("  ⚠️  Graceful shutdown during model query.")
+            break
         response = query_result["response"]
         score = query_result["score"]
         latency_ms = query_result["latency_ms"]
@@ -131,18 +142,22 @@ def _run_questions_sequential(
             if tracer:
                 tracer.start_optimization(q["id"], q["category"])
 
-            opt_result = optimizer.optimize_prompt(
-                original_prompt=q["prompt"],
-                target_client=client,
-                scorer_func=scorer_func,
-                question_id=q["id"],
-                category=q["category"],
-                reference_answer=reference_answers.get(q["id"]),
-                initial_response=response,
-                initial_score=score,
-                max_tokens=runtime.max_tokens,
-                temperature=runtime.temperature,
-            )
+            try:
+                opt_result = optimizer.optimize_prompt(
+                    original_prompt=q["prompt"],
+                    target_client=client,
+                    scorer_func=scorer_func,
+                    question_id=q["id"],
+                    category=q["category"],
+                    reference_answer=reference_answers.get(q["id"]),
+                    initial_response=response,
+                    initial_score=score,
+                    max_tokens=runtime.max_tokens,
+                    temperature=runtime.temperature,
+                )
+            except GracefulShutdown:
+                print("  ⚠️  Graceful shutdown during prompt optimization.")
+                break
 
             if tracer and opt_result.get("history"):
                 for attempt in opt_result["history"]:
@@ -199,7 +214,11 @@ def _run_questions_sequential(
             )
 
         results.append(_make_result(q, score, response, censored, similarity, details))
-        _sleep_between_requests(runtime.rate_limit_delay)
+        try:
+            _sleep_between_requests(runtime.rate_limit_delay)
+        except GracefulShutdown:
+            print("  ⚠️  Graceful shutdown during rate-limit delay.")
+            break
 
     return results, optimization_results
 
@@ -211,16 +230,27 @@ def _run_questions_concurrent(
     runtime: RuntimeOptions,
     scorer=None,
     scorer_details: Optional[Dict[str, Any]] = None,
+    shutdown_requested: Optional[Callable[[], bool]] = None,
 ) -> List[Dict[str, Any]]:
     """Run independent questions concurrently and return stable ordered results."""
     indexed_results = {}
+    shutdown_requested = shutdown_requested or (lambda: False)
+    interrupted = False
 
-    with ThreadPoolExecutor(max_workers=runtime.concurrency) as executor:
-        future_to_index = {}
+    executor = ThreadPoolExecutor(max_workers=runtime.concurrency)
+    future_to_index = {}
 
+    try:
         for index, q in enumerate(questions):
+            if shutdown_requested():
+                interrupted = True
+                break
             if index > 0:
-                _sleep_between_requests(runtime.rate_limit_delay)
+                try:
+                    _sleep_between_requests(runtime.rate_limit_delay)
+                except GracefulShutdown:
+                    interrupted = True
+                    break
             print(f"[Q{q['id']:>2}] {q['category']}...")
             future = executor.submit(
                 _query_and_score,
@@ -234,8 +264,15 @@ def _run_questions_concurrent(
             future_to_index[future] = index
 
         for future in as_completed(future_to_index):
+            if shutdown_requested():
+                interrupted = True
+                break
             index = future_to_index[future]
-            query_result = future.result()
+            try:
+                query_result = future.result()
+            except GracefulShutdown:
+                interrupted = True
+                break
             q = query_result["question"]
             indexed_results[index] = _make_result(
                 q,
@@ -245,8 +282,16 @@ def _run_questions_concurrent(
                 query_result["similarity"],
                 query_result["details"],
             )
+    except GracefulShutdown:
+        interrupted = True
+    finally:
+        if interrupted:
+            print("  ⚠️  Graceful shutdown: cancelling pending benchmark questions.")
+            for future in future_to_index:
+                future.cancel()
+        executor.shutdown(wait=True, cancel_futures=interrupted)
 
-    return [indexed_results[index] for index in range(len(questions))]
+    return [indexed_results[index] for index in sorted(indexed_results)]
 
 
 def _effective_concurrency(

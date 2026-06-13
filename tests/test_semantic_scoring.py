@@ -30,7 +30,10 @@ def check(condition, message):
 @pytest.fixture(scope="module")
 def scorer():
     """Create scorer instance once for all tests (model loading is expensive)."""
-    scorer = SemanticScorer("gte-large-en-v1.5")
+    try:
+        scorer = SemanticScorer("gte-large-en-v1.5")
+    except Exception as e:
+        pytest.skip(f"semantic model unavailable: {e}")
     scorer.load_reference_answers("answers_all.txt")
     return scorer
 

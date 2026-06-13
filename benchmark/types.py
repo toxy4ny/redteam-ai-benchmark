@@ -71,3 +71,4 @@ class BenchmarkRunResult:
     interpretation: str
     optimization_results: List[Dict[str, Any]] = field(default_factory=list)
     exported: Dict[str, str] = field(default_factory=dict)
+    interrupted: bool = False

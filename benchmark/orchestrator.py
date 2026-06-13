@@ -24,6 +24,7 @@ class SingleModelBenchmarkResult:
     optimization_results: List[Dict[str, Any]] = field(default_factory=list)
     exported: Dict[str, str] = field(default_factory=dict)
     tracer_failed: bool = False
+    interrupted: bool = False
 
 
 def run_single_model_benchmark(
@@ -39,6 +40,7 @@ def run_single_model_benchmark(
     tracer_factory: Optional[Callable[[Any], Any]] = None,
     export_callback: Optional[Callable[..., Dict[str, str]]] = None,
     export_kwargs: Optional[Dict[str, Any]] = None,
+    shutdown_requested: Optional[Callable[[], bool]] = None,
 ) -> SingleModelBenchmarkResult:
     """Run, score, trace, and optionally export one model benchmark."""
     scorer_func = scorer_bundle.score_func
@@ -47,6 +49,7 @@ def run_single_model_benchmark(
     scoring_method = scorer_bundle.method_label
     tracer = None
     tracer_failed = False
+    shutdown_requested = shutdown_requested or (lambda: False)
 
     if tracer_config and tracer_factory:
         try:
@@ -71,6 +74,7 @@ def run_single_model_benchmark(
             runtime,
             scorer=scorer,
             scorer_details=scorer_details,
+            shutdown_requested=shutdown_requested,
         )
         optimization_results = []
     else:
@@ -85,22 +89,32 @@ def run_single_model_benchmark(
             tracer=tracer,
             scorer=scorer,
             scorer_details=scorer_details,
+            shutdown_requested=shutdown_requested,
         )
 
-    total_score = sum(r["score"] for r in results) / len(results)
+    interrupted = shutdown_requested()
+    total_score = sum(r["score"] for r in results) / len(results) if results else 0.0
     interpretation = get_interpretation(total_score)
 
     if tracer:
         tracer.end_benchmark(total_score, interpretation)
 
     exported = {}
-    if export_callback:
+    if export_callback and results:
+        metadata = {}
+        if interrupted:
+            metadata = {
+                "interrupted": True,
+                "completed_questions": len(results),
+                "total_questions": len(questions),
+            }
         exported = export_callback(
             results=results,
             model_name=model_name,
             total_score=total_score,
             interpretation=interpretation,
             scoring_method=scoring_method,
+            metadata=metadata or None,
             **(export_kwargs or {}),
         )
 
@@ -112,4 +126,5 @@ def run_single_model_benchmark(
         optimization_results=optimization_results,
         exported=exported,
         tracer_failed=tracer_failed,
+        interrupted=interrupted,
     )

@@ -9,6 +9,7 @@ from pick import pick
 
 import tracing.langfuse as langfuse_module
 from benchmark import (
+    GracefulShutdown,
     QuestionLoadError,
     RuntimeOptions,
     _effective_concurrency,
@@ -17,6 +18,7 @@ from benchmark import (
     _run_questions_concurrent,
     _run_questions_sequential,
     _sleep_between_requests,
+    install_signal_handlers,
     load_questions,
     run_single_model_benchmark,
 )
@@ -57,6 +59,7 @@ __all__ = [
     "DEFAULT_SEMANTIC_MODEL",
     "DEFAULT_TEMPERATURE",
     "LANGFUSE_AVAILABLE",
+    "GracefulShutdown",
     "Langfuse",
     "LangfuseTracer",
     "PromptOptimizer",
@@ -73,6 +76,7 @@ __all__ = [
     "cmd_list_models",
     "cmd_run_benchmark",
     "is_censored_response",
+    "install_signal_handlers",
     "load_questions",
     "main",
     "parse_reference_answers",
@@ -217,6 +221,7 @@ def _export_benchmark_results(
     args,
     config,
     multi_model: bool = False,
+    metadata: Dict | None = None,
 ) -> Dict[str, str]:
     """Export benchmark results according to CLI and config options."""
     export_config = config.export if config else None
@@ -242,6 +247,7 @@ def _export_benchmark_results(
             total_score=total_score,
             interpretation=interpretation,
             scoring_method=scoring_method,
+            metadata=metadata,
             filename=filename,
         )
 
@@ -327,6 +333,7 @@ def _run_model_with_export(
     reference_answers=None,
     langfuse_config=None,
     multi_model=False,
+    shutdown_requested=None,
 ):
     return run_single_model_benchmark(
         questions=questions,
@@ -340,6 +347,7 @@ def _run_model_with_export(
         tracer_factory=LangfuseTracer if langfuse_config else None,
         export_callback=_export_benchmark_results,
         export_kwargs={"args": args, "config": config, "multi_model": multi_model},
+        shutdown_requested=shutdown_requested,
     )
 
 
@@ -461,69 +469,85 @@ def cmd_interactive(args):
         optimizer = _initialize_optimizer(args, default_optimizer_endpoint)
         langfuse_config = _langfuse_config_or_none(config)
         all_results = []
+        interrupted = False
 
         try:
-            for i, model_name in enumerate(selected_model_names, 1):
-                print("=" * 70)
-                print(f"Testing model [{i}/{len(selected_model_names)}]: {model_name}")
-                print("=" * 70)
-                print()
+            with install_signal_handlers() as shutdown:
+                for i, model_name in enumerate(selected_model_names, 1):
+                    if shutdown.is_requested():
+                        interrupted = True
+                        break
 
-                try:
-                    model_client = _create_configured_client(
-                        args.provider, args.endpoint, model_name, api_key, config
-                    )
-                except (RuntimeError, ValueError) as e:
-                    print(f"❌ Error creating client: {e}")
-                    continue
+                    print("=" * 70)
+                    print(f"Testing model [{i}/{len(selected_model_names)}]: {model_name}")
+                    print("=" * 70)
+                    print()
 
-                try:
-                    if not model_client.test_connection():
-                        print(f"❌ Cannot connect to model {model_name}")
+                    try:
+                        model_client = _create_configured_client(
+                            args.provider, args.endpoint, model_name, api_key, config
+                        )
+                    except (RuntimeError, ValueError) as e:
+                        print(f"❌ Error creating client: {e}")
                         continue
 
                     try:
-                        run_result = _run_model_with_export(
-                            questions=questions,
-                            client=model_client,
-                            model_name=model_name,
-                            scorer_bundle=scorer_bundle,
-                            runtime=RuntimeOptions(**runtime.__dict__),
-                            args=args,
-                            config=config,
-                            optimizer=optimizer,
-                            reference_answers=reference_answers,
-                            langfuse_config=langfuse_config,
-                            multi_model=len(selected_model_names) > 1,
-                        )
-                    except RuntimeError as e:
-                        print(f"   ❌ Error: {e}")
-                        print(f"   Skipping remaining questions for {model_name}")
-                        continue
-                finally:
-                    model_client.close()
+                        if not model_client.test_connection():
+                            print(f"❌ Cannot connect to model {model_name}")
+                            continue
 
-                if run_result.results:
-                    if run_result.optimization_results and optimizer:
-                        save_optimization_results(
-                            run_result.optimization_results,
-                            model_name,
-                            args.optimizer_model,
-                        )
+                        try:
+                            run_result = _run_model_with_export(
+                                questions=questions,
+                                client=model_client,
+                                model_name=model_name,
+                                scorer_bundle=scorer_bundle,
+                                runtime=RuntimeOptions(**runtime.__dict__),
+                                args=args,
+                                config=config,
+                                optimizer=optimizer,
+                                reference_answers=reference_answers,
+                                langfuse_config=langfuse_config,
+                                multi_model=len(selected_model_names) > 1,
+                                shutdown_requested=shutdown.is_requested,
+                            )
+                        except RuntimeError as e:
+                            print(f"   ❌ Error: {e}")
+                            print(f"   Skipping remaining questions for {model_name}")
+                            continue
+                    finally:
+                        model_client.close()
 
-                    all_results.append(
-                        {
-                            "model": model_name,
-                            "score": run_result.total_score,
-                            "interpretation": run_result.interpretation,
-                        }
-                    )
-                    print(f"\n✅ {model_name}: {run_result.total_score:.1f}%\n")
-                else:
-                    print(f"\n❌ No results for {model_name}\n")
+                    if run_result.results:
+                        if run_result.optimization_results and optimizer:
+                            save_optimization_results(
+                                run_result.optimization_results,
+                                model_name,
+                                args.optimizer_model,
+                            )
+
+                        all_results.append(
+                            {
+                                "model": model_name,
+                                "score": run_result.total_score,
+                                "interpretation": run_result.interpretation,
+                            }
+                        )
+                        print(f"\n✅ {model_name}: {run_result.total_score:.1f}%\n")
+                    else:
+                        print(f"\n❌ No results for {model_name}\n")
+
+                    if getattr(run_result, "interrupted", False):
+                        interrupted = True
+                        break
+        except GracefulShutdown:
+            interrupted = True
         finally:
             if optimizer:
                 optimizer.close()
+
+        if interrupted:
+            print("\n⚠️  Benchmark interrupted. Partial results were saved when available.")
 
         if all_results:
             print("\n" + "=" * 70)
@@ -539,6 +563,9 @@ def cmd_interactive(args):
             print("=" * 70)
         else:
             print("\n❌ No successful tests completed")
+
+        if interrupted:
+            sys.exit(130)
 
     except RuntimeError as e:
         print(f"❌ Error: {e}")
@@ -564,60 +591,73 @@ def cmd_run_benchmark(args):
 
     optimizer = None
     try:
-        if not client.test_connection():
-            print(f"❌ Cannot connect to {args.provider} at {client.base_url}")
-            print(f"   Is {args.provider} running?")
-            sys.exit(1)
-
-        print("🚀 Red Team AI Benchmark v1.0")
-        print(f"   Provider: {args.provider}")
-        print(f"   Model: {args.model}")
-        print(f"   Endpoint: {client.base_url}")
-        print(
-            f"   Runtime: max_tokens={runtime.max_tokens}, "
-            f"temperature={runtime.temperature}, "
-            f"rate_limit_delay={runtime.rate_limit_delay}, "
-            f"concurrency={runtime.concurrency}"
-        )
-        print("   Evaluating uncensoredness & technical accuracy\n")
-
-        questions = _load_questions_for_cli(config.questions_file if config else "benchmark.json")
-        scorer_bundle = _create_scorer_bundle(args, config, questions)
-        print(f"✓ Using {scorer_bundle.method_label} scoring\n")
-
-        reference_answers = {}
-        if args.optimize_prompts:
-            reference_answers = parse_reference_answers(
-                config.answers_file if config else "answers_all.txt"
-            )
-
-        optimizer = _initialize_optimizer(args, args.optimizer_endpoint or client.base_url)
-        langfuse_config = _langfuse_config_or_none(config)
-
         try:
-            run_result = _run_model_with_export(
-                questions=questions,
-                client=client,
-                model_name=args.model,
-                scorer_bundle=scorer_bundle,
-                runtime=runtime,
-                args=args,
-                config=config,
-                optimizer=optimizer,
-                reference_answers=reference_answers,
-                langfuse_config=langfuse_config,
-            )
-        except RuntimeError as e:
-            print(f"   ❌ Error: {e}")
-            print("   Aborting benchmark.")
-            sys.exit(1)
+            with install_signal_handlers() as shutdown:
+                if not client.test_connection():
+                    print(f"❌ Cannot connect to {args.provider} at {client.base_url}")
+                    print(f"   Is {args.provider} running?")
+                    sys.exit(1)
 
-        if run_result.optimization_results:
-            save_optimization_results(
-                run_result.optimization_results, args.model, args.optimizer_model
-            )
+                print("🚀 Red Team AI Benchmark v1.0")
+                print(f"   Provider: {args.provider}")
+                print(f"   Model: {args.model}")
+                print(f"   Endpoint: {client.base_url}")
+                print(
+                    f"   Runtime: max_tokens={runtime.max_tokens}, "
+                    f"temperature={runtime.temperature}, "
+                    f"rate_limit_delay={runtime.rate_limit_delay}, "
+                    f"concurrency={runtime.concurrency}"
+                )
+                print("   Evaluating uncensoredness & technical accuracy\n")
 
-        _print_final_report(run_result.results, run_result.total_score)
+                questions = _load_questions_for_cli(config.questions_file if config else "benchmark.json")
+                scorer_bundle = _create_scorer_bundle(args, config, questions)
+                print(f"✓ Using {scorer_bundle.method_label} scoring\n")
+
+                reference_answers = {}
+                if args.optimize_prompts:
+                    reference_answers = parse_reference_answers(
+                        config.answers_file if config else "answers_all.txt"
+                    )
+
+                optimizer = _initialize_optimizer(args, args.optimizer_endpoint or client.base_url)
+                langfuse_config = _langfuse_config_or_none(config)
+
+                try:
+                    run_result = _run_model_with_export(
+                        questions=questions,
+                        client=client,
+                        model_name=args.model,
+                        scorer_bundle=scorer_bundle,
+                        runtime=runtime,
+                        args=args,
+                        config=config,
+                        optimizer=optimizer,
+                        reference_answers=reference_answers,
+                        langfuse_config=langfuse_config,
+                        shutdown_requested=shutdown.is_requested,
+                    )
+                except RuntimeError as e:
+                    print(f"   ❌ Error: {e}")
+                    print("   Aborting benchmark.")
+                    sys.exit(1)
+
+                if run_result.optimization_results:
+                    save_optimization_results(
+                        run_result.optimization_results, args.model, args.optimizer_model
+                    )
+
+                if run_result.results:
+                    _print_final_report(run_result.results, run_result.total_score)
+                else:
+                    print("\n⚠️  Benchmark interrupted before any question completed.")
+
+                if getattr(run_result, "interrupted", False):
+                    print("\n⚠️  Benchmark interrupted. Partial results were saved when available.")
+                    sys.exit(130)
+        except GracefulShutdown:
+            print("\n⚠️  Benchmark interrupted before results could be saved.")
+            sys.exit(130)
     finally:
         client.close()
         if optimizer:

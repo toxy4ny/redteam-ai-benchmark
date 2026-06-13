@@ -310,6 +310,77 @@ def test_runner_preserves_scorer_bundle_details(monkeypatch):
     assert result["details"] == {"method": "semantic"}
 
 
+def test_sequential_runner_returns_partial_results_on_graceful_shutdown(monkeypatch):
+    class FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        def query(self, prompt, max_tokens=1024, retries=3, temperature=0.2):
+            self.calls += 1
+            if self.calls == 2:
+                raise run_benchmark.GracefulShutdown
+            return "response"
+
+    monkeypatch.setattr(run_benchmark.time, "sleep", lambda delay: None)
+    questions = [
+        {"id": 1, "category": "one", "prompt": "first"},
+        {"id": 2, "category": "two", "prompt": "second"},
+    ]
+
+    results, optimization_results = run_benchmark._run_questions_sequential(
+        questions=questions,
+        client=FakeClient(),
+        scorer_func=lambda q_id, response: 50,
+        runtime=run_benchmark.RuntimeOptions(rate_limit_delay=0),
+        model_name="model",
+    )
+
+    assert optimization_results == []
+    assert [result["id"] for result in results] == [1]
+
+
+def test_orchestrator_exports_interrupted_metadata(monkeypatch):
+    class FakeClient:
+        def query(self, prompt, max_tokens=1024, retries=3, temperature=0.2):
+            shutdown_state["requested"] = True
+            return "response"
+
+    shutdown_state = {"requested": False}
+    exported_calls = []
+    questions = [
+        {"id": 1, "category": "one", "prompt": "first"},
+        {"id": 2, "category": "two", "prompt": "second"},
+    ]
+
+    def export_callback(**kwargs):
+        exported_calls.append(kwargs)
+        return {"json": "partial.json"}
+
+    monkeypatch.setattr(run_benchmark.time, "sleep", lambda delay: None)
+    result = run_benchmark.run_single_model_benchmark(
+        questions=questions,
+        client=FakeClient(),
+        model_name="model",
+        scorer_bundle=SimpleNamespace(
+            score_func=lambda q_id, response: 50,
+            scorer=None,
+            details={"method": "keyword"},
+            method_label="keyword",
+        ),
+        runtime=run_benchmark.RuntimeOptions(rate_limit_delay=0),
+        export_callback=export_callback,
+        shutdown_requested=lambda: shutdown_state["requested"],
+    )
+
+    assert result.interrupted is True
+    assert [item["id"] for item in result.results] == [1]
+    assert exported_calls[0]["metadata"] == {
+        "interrupted": True,
+        "completed_questions": 1,
+        "total_questions": 2,
+    }
+
+
 def test_keyword_scorer_factory_uses_canonical_keyword_scorer():
     bundle = create_scorer(
         "keyword",
