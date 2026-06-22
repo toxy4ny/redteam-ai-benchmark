@@ -1,6 +1,7 @@
 """Ollama API client."""
 
-from typing import Dict, List
+import os
+from typing import Dict, List, Optional
 
 import requests
 
@@ -12,10 +13,26 @@ class OllamaClient(RequestsRetryMixin, APIClient):
 
     provider_name = "Ollama"
 
-    def __init__(self, base_url: str, model_name: str, timeout: int = 150):
+    def __init__(
+        self,
+        base_url: str,
+        model_name: str,
+        timeout: int = 150,
+        api_key: Optional[str] = None,
+        keep_alive: Optional[str] = None,
+    ):
         super().__init__(base_url, model_name)
         self.timeout = timeout
+        self.api_key = api_key or os.environ.get("OLLAMA_API_KEY")
+        self.keep_alive = keep_alive or os.environ.get("OLLAMA_KEEP_ALIVE")
         self.session = requests.Session()
+
+    def _get_headers(self) -> Dict[str, str]:
+        """Return Ollama headers, including optional reverse-proxy auth."""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
 
     def query(
         self,
@@ -26,7 +43,6 @@ class OllamaClient(RequestsRetryMixin, APIClient):
     ) -> str:
         """Query Ollama API with retry logic."""
         url = f"{self.base_url}/api/chat"
-        headers = {"Content-Type": "application/json"}
         payload = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
@@ -36,12 +52,15 @@ class OllamaClient(RequestsRetryMixin, APIClient):
                 "num_predict": max_tokens,
             },
         }
+        if self.keep_alive:
+            payload["keep_alive"] = self.keep_alive
 
         data = self._post_json_with_retries(
-            url=url, headers=headers, payload=payload, retries=retries
+            url=url, headers=self._get_headers(), payload=payload, retries=retries
         )
         try:
-            return data["message"]["content"]
+            message = data["message"]
+            return message.get("content") or message.get("thinking", "")
         except KeyError as e:
             raise RuntimeError(f"Invalid API response format: {e}") from e
 
@@ -49,7 +68,7 @@ class OllamaClient(RequestsRetryMixin, APIClient):
         """List available models from Ollama."""
         try:
             url = f"{self.base_url}/api/tags"
-            response = self.session.get(url, timeout=5)
+            response = self.session.get(url, headers=self._get_headers(), timeout=5)
             response.raise_for_status()
             data = response.json()
             return data.get("models", [])
@@ -60,7 +79,7 @@ class OllamaClient(RequestsRetryMixin, APIClient):
         """Test Ollama connection."""
         try:
             url = f"{self.base_url}/api/tags"
-            response = self.session.get(url, timeout=5)
+            response = self.session.get(url, headers=self._get_headers(), timeout=5)
             return response.status_code == 200
         except Exception:
             return False

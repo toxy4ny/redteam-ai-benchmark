@@ -17,6 +17,7 @@ class RuntimeOptions:
     max_tokens: int = DEFAULT_MAX_TOKENS
     temperature: float = DEFAULT_TEMPERATURE
     concurrency: int = DEFAULT_CONCURRENCY
+    request_log: Optional[str] = None
 
 
 @dataclass

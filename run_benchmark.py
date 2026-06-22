@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import os
 import re
 import subprocess
 import sys
@@ -47,7 +48,7 @@ from utils.config import DEFAULT_QUESTIONS_FILE, DEFAULT_SCORER
 from utils.export import BenchmarkExporter
 
 Langfuse = langfuse_module.Langfuse
-BENCHMARK_VERSION = "2.0.0"
+BENCHMARK_VERSION = "2.1.0"
 DEFAULT_PROFILE = "standard"
 PROFILE_DEFAULTS = {
     "quick": {"questions_file": DEFAULT_QUESTIONS_FILE},
@@ -123,8 +124,6 @@ def _apply_config_defaults(args, config) -> None:
         if config.provider.api_key:
             args.api_key = config.provider.api_key
         elif config.provider.api_key_env:
-            import os
-
             args.api_key = os.environ.get(config.provider.api_key_env)
 
     if (
@@ -190,6 +189,13 @@ def _resolve_runtime_options(args, config) -> RuntimeOptions:
             else config.concurrency
             if config
             else DEFAULT_CONCURRENCY
+        ),
+        request_log=(
+            args.request_log
+            if getattr(args, "request_log", None)
+            else getattr(config, "request_log", None)
+            if config
+            else None
         ),
     )
     _validate_runtime_options(options)
@@ -260,12 +266,83 @@ def _filter_questions_by_profile(
     return filtered or questions
 
 
-def _create_configured_client(provider, endpoint, model_name, api_key, config):
+def _parse_question_ids(raw_ids: List[str] | None) -> List[int]:
+    """Parse CLI question ids from repeated args and comma-separated chunks."""
+    if not raw_ids:
+        return []
+    parsed = []
+    for raw in raw_ids:
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                parsed.append(int(part))
+            except ValueError as e:
+                raise ValueError(f"Invalid question id: {part}") from e
+    return parsed
+
+
+def _filter_questions_by_ids(
+    questions: List[Dict],
+    question_ids: List[int],
+) -> List[Dict]:
+    """Filter by ids while preserving benchmark order."""
+    if not question_ids:
+        return questions
+
+    available = {question["id"] for question in questions}
+    missing = sorted(set(question_ids) - available)
+    if missing:
+        formatted = ", ".join(str(q_id) for q_id in missing)
+        raise ValueError(f"Unknown question id(s) for selected profile: {formatted}")
+
+    selected = set(question_ids)
+    return [question for question in questions if question["id"] in selected]
+
+
+def _select_questions_for_args(dataset: BenchmarkDataset, args) -> List[Dict]:
+    """Apply profile and optional id filtering."""
+    profile = getattr(args, "profile", DEFAULT_PROFILE)
+    questions = _filter_questions_by_profile(dataset.questions, profile)
+    question_ids = _parse_question_ids(getattr(args, "question_ids", None))
+    return _filter_questions_by_ids(questions, question_ids)
+
+
+def _ollama_keep_alive(provider, args=None, config=None) -> str | None:
+    """Resolve optional Ollama keep_alive without affecting other providers."""
+    if provider != "ollama":
+        return None
+    if args and getattr(args, "ollama_keep_alive", None):
+        return args.ollama_keep_alive
+    if config and getattr(config.provider, "keep_alive", None):
+        return config.provider.keep_alive
+    return os.environ.get("OLLAMA_KEEP_ALIVE")
+
+
+def _create_configured_client(provider, endpoint, model_name, api_key, config, args=None):
     """Create a provider client, applying config timeout when present."""
     timeout = config.provider.timeout if config else None
+    keep_alive = _ollama_keep_alive(provider, args, config)
+    extra_kwargs = {}
+    if keep_alive is not None:
+        extra_kwargs["keep_alive"] = keep_alive
     if timeout is None:
-        return create_client(provider, endpoint, model_name, api_key)
-    return create_client(provider, endpoint, model_name, api_key, timeout=timeout)
+        return create_client(
+            provider,
+            endpoint,
+            model_name,
+            api_key,
+            **extra_kwargs,
+        )
+    return create_client(
+        provider,
+        endpoint,
+        model_name,
+        api_key,
+        timeout=timeout,
+        **extra_kwargs,
+    )
 
 
 def _package_version() -> str:
@@ -314,6 +391,8 @@ def _export_run_config(
         "temperature": runtime.temperature if runtime else None,
         "rate_limit_delay": runtime.rate_limit_delay if runtime else None,
         "concurrency": runtime.concurrency if runtime else None,
+        "request_log": runtime.request_log if runtime else None,
+        "question_ids": getattr(args, "question_ids", None),
         "optimize_prompts": getattr(args, "optimize_prompts", None),
         "optimizer_model": getattr(args, "optimizer_model", None),
         "optimizer_endpoint": getattr(args, "optimizer_endpoint", None),
@@ -530,7 +609,9 @@ def cmd_list_models(args):
         config = _load_optional_config(args)
         _apply_config_defaults(args, config)
         api_key = getattr(args, "api_key", None)
-        client = _create_configured_client(args.provider, args.endpoint, "temp", api_key, config)
+        client = _create_configured_client(
+            args.provider, args.endpoint, "temp", api_key, config, args
+        )
 
         print(f"📋 Available models from {args.provider}:")
         print()
@@ -578,7 +659,9 @@ def cmd_interactive(args):
             sys.exit(1)
 
         api_key = getattr(args, "api_key", None)
-        client = _create_configured_client(args.provider, args.endpoint, "temp", api_key, config)
+        client = _create_configured_client(
+            args.provider, args.endpoint, "temp", api_key, config, args
+        )
 
         if not client.test_connection():
             print(f"❌ Cannot connect to {args.provider} at {client.base_url}")
@@ -633,9 +716,12 @@ def cmd_interactive(args):
         print(f"\n✅ Selected {len(selected_model_names)} model(s) for testing\n")
         _print_runtime(runtime)
 
-        profile = getattr(args, "profile", DEFAULT_PROFILE)
         dataset = _load_dataset_for_cli(_questions_file_for_args(args, config))
-        questions = _filter_questions_by_profile(dataset.questions, profile)
+        try:
+            questions = _select_questions_for_args(dataset, args)
+        except ValueError as e:
+            print(f"❌ Error: {e}")
+            sys.exit(1)
         scorer_bundle = _create_scorer_bundle(args, config, questions)
         print(f"✓ Using {scorer_bundle.method_label} scoring\n")
 
@@ -664,7 +750,7 @@ def cmd_interactive(args):
 
                     try:
                         model_client = _create_configured_client(
-                            args.provider, args.endpoint, model_name, api_key, config
+                            args.provider, args.endpoint, model_name, api_key, config, args
                         )
                     except (RuntimeError, ValueError) as e:
                         print(f"❌ Error creating client: {e}")
@@ -764,7 +850,9 @@ def cmd_run_benchmark(args):
 
     api_key = getattr(args, "api_key", None)
     try:
-        client = _create_configured_client(args.provider, args.endpoint, args.model, api_key, config)
+        client = _create_configured_client(
+            args.provider, args.endpoint, args.model, api_key, config, args
+        )
     except (RuntimeError, ValueError) as e:
         print(f"❌ Error: {e}")
         sys.exit(1)
@@ -793,7 +881,11 @@ def cmd_run_benchmark(args):
                 print("   Evaluating uncensoredness & technical accuracy\n")
 
                 dataset = _load_dataset_for_cli(_questions_file_for_args(args, config))
-                questions = _filter_questions_by_profile(dataset.questions, profile)
+                try:
+                    questions = _select_questions_for_args(dataset, args)
+                except ValueError as e:
+                    print(f"❌ Error: {e}")
+                    sys.exit(1)
                 scorer_bundle = _create_scorer_bundle(args, config, questions)
                 print(f"✓ Using {scorer_bundle.method_label} scoring\n")
 
@@ -870,7 +962,7 @@ def _add_endpoint_arg(parser):
 def _add_api_key_arg(parser):
     parser.add_argument(
         "--api-key",
-        help="API key for providers that require it (e.g., OpenRouter, OpenWebUI)",
+        help="API key for providers or reverse proxies (OpenRouter, OpenWebUI, Ollama)",
     )
 
 
@@ -917,6 +1009,19 @@ def _add_runtime_args(parser):
         type=int,
         default=None,
         help="Number of concurrent benchmark questions (default: config or 1)",
+    )
+    parser.add_argument(
+        "--question-ids",
+        nargs="+",
+        help="Run only selected v2 question IDs, preserving benchmark order",
+    )
+    parser.add_argument(
+        "--request-log",
+        help="Append per-question request diagnostics to a JSONL file",
+    )
+    parser.add_argument(
+        "--ollama-keep-alive",
+        help="Ollama keep_alive value for /api/chat, e.g. 30m or -1",
     )
 
 

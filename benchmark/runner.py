@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from scoring.base import ScoringResult
+from utils.request_log import append_request_log
 
 from .shutdown import GracefulShutdown
 from .types import QueryResult, QuestionResult, RuntimeOptions
@@ -115,6 +116,42 @@ def _query_and_score(
     ).__dict__
 
 
+def _log_request_result(
+    runtime: RuntimeOptions,
+    q: Dict[str, Any],
+    *,
+    phase: str,
+    response: str,
+    score: int,
+    latency_ms: Optional[float],
+    censored: bool,
+    critical_error: bool,
+    prompt: Optional[str] = None,
+    optimization_iteration: Optional[int] = None,
+    optimization_strategy: Optional[str] = None,
+) -> None:
+    """Write one request event without provider headers or credentials."""
+    append_request_log(
+        runtime.request_log,
+        {
+            "phase": phase,
+            "question_id": q.get("id"),
+            "category": q.get("category"),
+            "domain": q.get("domain"),
+            "difficulty": q.get("difficulty"),
+            "capability": q.get("capability"),
+            "prompt": prompt if prompt is not None else q.get("prompt"),
+            "response": response,
+            "score": score,
+            "latency_ms": latency_ms,
+            "censored": censored,
+            "critical_error": critical_error,
+            "optimization_iteration": optimization_iteration,
+            "optimization_strategy": optimization_strategy,
+        },
+    )
+
+
 def _run_questions_sequential(
     questions: List[Dict[str, Any]],
     client,
@@ -166,6 +203,17 @@ def _run_questions_sequential(
         metrics = query_result["metrics"]
         details = query_result["details"]
 
+        _log_request_result(
+            runtime,
+            q,
+            phase="baseline",
+            response=response,
+            score=score,
+            latency_ms=latency_ms,
+            censored=censored,
+            critical_error=critical_error,
+        )
+
         if score == 0 and optimizer:
             print("  ⚠️  Censored response (0%), starting optimization...")
 
@@ -200,6 +248,23 @@ def _run_questions_sequential(
                         latency_ms=0,
                         model=model_name,
                     )
+
+            for attempt in opt_result.get("history", []):
+                if attempt.get("iteration") == 0:
+                    continue
+                _log_request_result(
+                    runtime,
+                    q,
+                    phase="optimization",
+                    prompt=attempt.get("prompt", q["prompt"]),
+                    response=attempt.get("response", ""),
+                    score=attempt.get("score", 0),
+                    latency_ms=attempt.get("latency_ms"),
+                    censored=attempt.get("score", 0) == 0,
+                    critical_error=False,
+                    optimization_iteration=attempt.get("iteration"),
+                    optimization_strategy=attempt.get("strategy"),
+                )
 
             if tracer:
                 tracer.end_optimization(
@@ -326,6 +391,16 @@ def _run_questions_concurrent(
                 interrupted = True
                 break
             q = query_result["question"]
+            _log_request_result(
+                runtime,
+                q,
+                phase="baseline",
+                response=query_result["response"],
+                score=query_result["score"],
+                latency_ms=query_result["latency_ms"],
+                censored=query_result["censored"],
+                critical_error=query_result["critical_error"],
+            )
             indexed_results[index] = _make_result(
                 q,
                 query_result["score"],

@@ -37,8 +37,8 @@ class FakeRequestsSession:
         )
         return FakeResponse(self.response_payload)
 
-    def get(self, url, timeout=None):
-        self.gets.append({"url": url, "timeout": timeout})
+    def get(self, url, headers=None, timeout=None):
+        self.gets.append({"url": url, "headers": headers, "timeout": timeout})
         return FakeResponse({"models": [], "data": []})
 
     def close(self):
@@ -89,6 +89,43 @@ def test_ollama_query_passes_max_tokens_and_temperature():
     assert payload["options"]["num_predict"] == 42
     assert payload["options"]["temperature"] == 0.7
     assert fake_session.posts[0]["timeout"] == 77
+
+
+def test_ollama_auth_keep_alive_and_thinking_fallback():
+    client = OllamaClient(
+        "http://ollama.local",
+        "test-model",
+        timeout=77,
+        api_key="token-123",
+        keep_alive="30m",
+    )
+    fake_session = FakeRequestsSession(
+        {"message": {"content": "", "thinking": "reasoned answer"}}
+    )
+    client.session = fake_session
+
+    result = client.query("hello", max_tokens=42, temperature=0.7)
+    models = client.list_models()
+    connected = client.test_connection()
+
+    assert result == "reasoned answer"
+    assert models == []
+    assert connected is True
+    post = fake_session.posts[0]
+    assert post["headers"]["Authorization"] == "Bearer token-123"
+    assert post["json"]["keep_alive"] == "30m"
+    assert all(
+        call["headers"]["Authorization"] == "Bearer token-123"
+        for call in fake_session.gets
+    )
+
+
+def test_ollama_empty_content_and_no_thinking_returns_empty_string():
+    client = OllamaClient("http://ollama.local", "test-model")
+    fake_session = FakeRequestsSession({"message": {"content": ""}})
+    client.session = fake_session
+
+    assert client.query("hello") == ""
 
 
 def test_lmstudio_query_passes_max_tokens_and_temperature():
@@ -424,6 +461,25 @@ export:
         run_benchmark.load_config(str(config_path))
 
 
+def test_config_loads_request_log_and_ollama_keep_alive(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+provider:
+  name: ollama
+  keep_alive: 30m
+request_log: ./results/requests.jsonl
+""",
+        encoding="utf-8",
+    )
+
+    config = run_benchmark.load_config(str(config_path))
+
+    assert config.provider.endpoint == "http://localhost:11434"
+    assert config.provider.keep_alive == "30m"
+    assert config.request_log == "./results/requests.jsonl"
+
+
 def test_interactive_loads_dataset_once_for_multiple_models(monkeypatch):
     class FakeClient:
         base_url = "http://provider.local"
@@ -574,6 +630,77 @@ def test_run_command_delegates_to_single_model_orchestrator(monkeypatch):
 
     assert calls[0]["model_name"] == "model-a"
     assert calls[0]["questions"] == [{"id": 1, "category": "AMSI", "prompt": "prompt"}]
+
+
+def test_question_ids_filter_preserves_dataset_order_after_profile():
+    dataset = run_benchmark.BenchmarkDataset(
+        questions=[
+            {
+                "id": 1,
+                "category": "a",
+                "prompt": "p1",
+                "profiles": ["standard"],
+            },
+            {"id": 7, "category": "b", "prompt": "p7", "profiles": ["quick"]},
+            {
+                "id": 12,
+                "category": "c",
+                "prompt": "p12",
+                "profiles": ["standard"],
+            },
+        ],
+        path="dataset.jsonl",
+        content_hash="hash",
+    )
+    args = SimpleNamespace(profile="standard", question_ids=["12", "1"])
+
+    selected = run_benchmark._select_questions_for_args(dataset, args)
+
+    assert [question["id"] for question in selected] == [1, 12]
+
+
+def test_question_ids_filter_rejects_unknown_id_for_profile():
+    dataset = run_benchmark.BenchmarkDataset(
+        questions=[
+            {"id": 1, "category": "a", "prompt": "p1", "profiles": ["standard"]},
+            {"id": 7, "category": "b", "prompt": "p7", "profiles": ["quick"]},
+        ],
+        path="dataset.jsonl",
+        content_hash="hash",
+    )
+    args = SimpleNamespace(profile="standard", question_ids=["7"])
+
+    with pytest.raises(ValueError, match="Unknown question id"):
+        run_benchmark._select_questions_for_args(dataset, args)
+
+
+def test_request_log_appends_baseline_without_provider_secrets(tmp_path):
+    class FakeClient:
+        api_key = "secret-token"
+
+        def query(self, prompt, max_tokens=1024, retries=3, temperature=0.2):
+            return "AmsiScanBuffer VirtualProtect patch"
+
+    log_path = tmp_path / "logs" / "requests.jsonl"
+    questions = [{"id": 1, "category": "AMSI", "prompt": "prompt"}]
+
+    results, optimization = run_benchmark._run_questions_sequential(
+        questions=questions,
+        client=FakeClient(),
+        scorer_func=lambda q_id, response: 50,
+        runtime=run_benchmark.RuntimeOptions(rate_limit_delay=0, request_log=str(log_path)),
+        model_name="model",
+    )
+
+    assert results[0]["score"] == 50
+    assert optimization == []
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["phase"] == "baseline"
+    assert payload["question_id"] == 1
+    assert payload["response"] == "AmsiScanBuffer VirtualProtect patch"
+    assert "secret-token" not in lines[0]
 
 
 def test_langfuse_tracer_buffers_until_end_benchmark(monkeypatch):

@@ -36,6 +36,7 @@ def create_client(
     model: str,
     api_key: Optional[str] = None,
     timeout: Optional[int] = None,
+    keep_alive: Optional[str] = None,
 ) -> APIClient:
     """
     Create appropriate API client based on provider.
@@ -46,6 +47,7 @@ def create_client(
         model: Model name/ID
         api_key: API key for providers that require it (e.g., OpenRouter)
         timeout: Optional request timeout in seconds
+        keep_alive: Optional Ollama keep_alive value
 
     Returns:
         Configured APIClient instance
@@ -67,7 +69,13 @@ def create_client(
     if provider == "lmstudio":
         return LMStudioClient(endpoint, model, timeout=timeout if timeout is not None else 150)
     elif provider == "ollama":
-        return OllamaClient(endpoint, model, timeout=timeout if timeout is not None else 150)
+        return OllamaClient(
+            endpoint,
+            model,
+            timeout=timeout if timeout is not None else 150,
+            api_key=api_key,
+            keep_alive=keep_alive,
+        )
     elif provider == "openwebui":
         return OpenWebUIClient(
             endpoint,

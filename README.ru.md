@@ -83,7 +83,7 @@ uv sync
 
 | Провайдер | Endpoint по умолчанию | Примечание |
 | --- | --- | --- |
-| `ollama` | `http://localhost:11434` | Native Ollama API |
+| `ollama` | `http://localhost:11434` | Native Ollama API; optional Bearer auth для reverse proxy |
 | `lmstudio` | `http://localhost:1234` | OpenAI-compatible LM Studio API |
 | `openwebui` | `http://localhost:3000` | OpenAI-compatible OpenWebUI API |
 | `openrouter` | `https://openrouter.ai/api/v1` | Требует API key |
@@ -111,6 +111,18 @@ uv run run_benchmark.py run ollama -m "llama3.1:8b"
 uv run run_benchmark.py run ollama -m "llama3.1:8b" --profile quick
 ```
 
+Запуск выбранных v2 вопросов по ID:
+
+```bash
+uv run run_benchmark.py run ollama -m "llama3.1:8b" --question-ids 5 12
+```
+
+Append-only JSONL лог по каждому вопросу:
+
+```bash
+uv run run_benchmark.py run ollama -m "llama3.1:8b" --request-log results/requests.jsonl
+```
+
 Интерактивный запуск нескольких локальных моделей:
 
 ```bash
@@ -130,6 +142,8 @@ uv run run_benchmark.py interactive ollama --profile standard
 ## Scoring
 
 Runtime scorer всегда `rubric`. Он deterministic и не требует внешней LLM-as-judge. Каждый v2 вопрос содержит атомарные criteria, fatal-error patterns, acceptable variants, tags и weight.
+
+Legacy режимы `keyword`, `semantic` и `hybrid` для runtime scoring не поддерживаются. Для post-hoc LLM-as-Judge audit используйте отдельную команду `judge`.
 
 ## Offline LLM-as-Judge
 
@@ -155,6 +169,8 @@ OPENROUTER_API_KEY=... uv run run_benchmark.py judge \
 provider:
   name: ollama
   endpoint: http://localhost:11434
+  # api_key: sk-xxx
+  # keep_alive: 30m
 
 scoring:
   method: rubric
@@ -173,6 +189,7 @@ rate_limit_delay: 1.5
 max_tokens: 1024
 temperature: 0.2
 concurrency: 1
+# request_log: ./results/requests.jsonl
 ```
 
 Запуск с конфигом:
@@ -191,14 +208,14 @@ JSON export содержит результаты модели, evidence по ru
   "scoring_method": "rubric",
   "total_score": 75.0,
   "interpretation": "requires-validation",
-  "benchmark_version": "2.0.0",
+  "benchmark_version": "2.1.0",
   "dataset_id": "redteam-ai-benchmark-v2",
   "dataset_version": "2.0.0",
   "dataset_hash": "...",
   "scorer_version": "rubric",
   "config_hash": "...",
   "git_commit": "...",
-  "package_version": "2.0.0",
+  "package_version": "2.1.0",
   "runtime_profile": "standard",
   "summary": {
     "metrics": {

@@ -5,9 +5,10 @@
 provider:
   name: ollama # ollama, lmstudio, openwebui, openrouter
   endpoint: http://localhost:11434
-  # api_key: sk-xxx           # API key (optional for openwebui, required for openrouter)
+  # api_key: sk-xxx           # API key (optional for ollama/openwebui, required for openrouter)
   # api_key_env: OPENROUTER_API_KEY  # Or use env variable
   # default_model: llama3.1:8b
+  # keep_alive: 30m           # Ollama-only keep_alive for /api/chat
 
 # OpenWebUI Provider Example (uncomment to use):
 # provider:
@@ -47,6 +48,7 @@ rate_limit_delay: 1.5
 max_tokens: 1024
 temperature: 0.2
 concurrency: 1
+# request_log: ./results/requests.jsonl  # Optional append-only per-question JSONL log
 
 # Langfuse Observability
 langfuse:

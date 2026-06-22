@@ -46,6 +46,8 @@ CLI profiles are defined in `run_benchmark.py`:
 
 If adding a profile, update `PROFILE_DEFAULTS`, CLI docs, README files, and tests.
 
+`--question-ids` is an additional runtime filter. Apply it after profile filtering and preserve dataset order. Unknown IDs in the selected profile must fail before any model request.
+
 ## Scoring
 
 Default scorer:
@@ -57,6 +59,8 @@ rubric
 `scoring/rubric_scorer.py` is deterministic and local. It checks each criterion pattern against the response, records passed and failed criteria, collects evidence, and applies fatal-error rules before normal scoring.
 
 Do not add runtime scorer modes for keyword, semantic, hybrid, or online LLM judging. LLM-as-Judge belongs only in the offline `judge` command.
+
+The request log is an optional JSONL side artifact selected with `--request-log` or top-level `request_log` in config. It may include prompts, responses, scores, latency, refusal and critical-error flags, and question metadata. It must not include provider headers or API keys.
 
 ## Offline LLM-as-Judge
 
@@ -132,3 +136,5 @@ Do not add large batches of questions without rubric criteria.
 Prompt optimization remains separate from base-model scoring. Do not mix optimized results into base model comparison tables.
 
 Langfuse tracing is optional and should not be required for local or CI validation.
+
+Ollama supports optional reverse-proxy Bearer auth through `--api-key`, config, or `OLLAMA_API_KEY`, and optional `keep_alive` through `--ollama-keep-alive`, `provider.keep_alive`, or `OLLAMA_KEEP_ALIVE`. Keep those options provider-local.

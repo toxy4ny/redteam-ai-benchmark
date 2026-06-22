@@ -210,7 +210,7 @@ def test_export_includes_v2_provenance_and_criteria_csv(tmp_path):
     payload = json.loads((tmp_path / "v2-result.json").read_text(encoding="utf-8"))
     assert exported["json"].endswith("v2-result.json")
     assert exported["criteria_csv"].endswith("v2-result_criteria.csv")
-    assert payload["benchmark_version"] == "2.0.0"
+    assert payload["benchmark_version"] == "2.1.0"
     assert payload["dataset_id"] == "redteam-ai-benchmark-v2"
     assert payload["dataset_hash"] == dataset.content_hash
     assert payload["runtime_profile"] == "standard"

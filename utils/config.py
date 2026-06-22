@@ -22,6 +22,7 @@ class ProviderConfig:
     api_key_env: Optional[str] = None
     default_model: Optional[str] = None
     timeout: int = 120
+    keep_alive: Optional[str] = None
 
 
 @dataclass
@@ -81,6 +82,7 @@ class BenchmarkConfig:
     max_tokens: int = 768
     temperature: float = 0.2
     concurrency: int = 1
+    request_log: Optional[str] = None
 
 
 # Default providers configuration
@@ -116,6 +118,7 @@ def _dict_to_provider_config(data: Dict[str, Any]) -> ProviderConfig:
         api_key_env=data.get("api_key_env"),
         default_model=data.get("default_model"),
         timeout=data.get("timeout", 120),
+        keep_alive=data.get("keep_alive"),
     )
 
 
@@ -189,17 +192,18 @@ def load_config(config_path: str) -> BenchmarkConfig:
 
     # Start with defaults if available
     if provider_name in DEFAULT_PROVIDERS:
-        provider = DEFAULT_PROVIDERS[provider_name]
-        # Override with provided values
-        if "endpoint" in provider_data:
-            provider = ProviderConfig(
-                name=provider_name,
-                endpoint=provider_data["endpoint"],
-                api_key=provider_data.get("api_key"),
-                api_key_env=provider_data.get("api_key_env", provider.api_key_env),
-                default_model=provider_data.get("default_model", provider.default_model),
-                timeout=provider_data.get("timeout", provider.timeout),
-            )
+        default_provider = DEFAULT_PROVIDERS[provider_name]
+        provider = ProviderConfig(
+            name=provider_name,
+            endpoint=provider_data.get("endpoint", default_provider.endpoint),
+            api_key=provider_data.get("api_key", default_provider.api_key),
+            api_key_env=provider_data.get("api_key_env", default_provider.api_key_env),
+            default_model=provider_data.get(
+                "default_model", default_provider.default_model
+            ),
+            timeout=provider_data.get("timeout", default_provider.timeout),
+            keep_alive=provider_data.get("keep_alive", default_provider.keep_alive),
+        )
     else:
         provider = _dict_to_provider_config(provider_data)
 
@@ -221,6 +225,7 @@ def load_config(config_path: str) -> BenchmarkConfig:
         max_tokens=data.get("max_tokens", 768),
         temperature=data.get("temperature", 0.2),
         concurrency=data.get("concurrency", 1),
+        request_log=data.get("request_log"),
     )
     validate_config(config)
     return config
@@ -274,6 +279,7 @@ def create_default_config(
             api_key_env=provider_config.api_key_env,
             default_model=model,
             timeout=provider_config.timeout,
+            keep_alive=provider_config.keep_alive,
         )
 
     return BenchmarkConfig(provider=provider_config)
@@ -309,6 +315,7 @@ def save_config(config: BenchmarkConfig, config_path: str) -> None:
         "max_tokens": config.max_tokens,
         "temperature": config.temperature,
         "concurrency": config.concurrency,
+        "request_log": config.request_log,
     }
 
     # Add optional fields
@@ -316,6 +323,8 @@ def save_config(config: BenchmarkConfig, config_path: str) -> None:
         data["provider"]["api_key_env"] = config.provider.api_key_env
     if config.provider.default_model:
         data["provider"]["default_model"] = config.provider.default_model
+    if config.provider.keep_alive:
+        data["provider"]["keep_alive"] = config.provider.keep_alive
     if config.optimization.optimizer_model:
         data["optimization"]["optimizer_model"] = config.optimization.optimizer_model
 
