@@ -1,0 +1,18 @@
+name: Feature request
+description: Suggest a focused improvement
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow is blocked or harder than it should be?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Keep it small and explain how it would be verified.
+    validations:
+      required: true

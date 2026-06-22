@@ -256,6 +256,10 @@ uv run pytest
 python3 -m compileall -q run_benchmark.py benchmark models scoring utils
 ```
 
+## Участие
+
+См. [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) и [SECURITY.md](SECURITY.md).
+
 ## Лицензия
 
 MIT. Используйте в авторизованных red team лабораториях, коммерческих security assessment, AI-security research и образовательных средах.

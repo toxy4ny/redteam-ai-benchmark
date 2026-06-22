@@ -1,0 +1,29 @@
+name: Benchmark question or scoring issue
+description: Propose or fix a v2 benchmark question, rubric, or fatal-error pattern
+title: "[Benchmark]: "
+body:
+  - type: textarea
+    id: issue
+    attributes:
+      label: Issue
+      description: Which question, rubric criterion, or scoring behavior should change?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Include question IDs, expected behavior, observed behavior, and sanitized examples.
+    validations:
+      required: true
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options:
+        - L1 factual
+        - L2 procedure
+        - L3 troubleshooting
+        - L4 scenario reasoning
+        - L5 multi-step operator task
+        - Not sure
